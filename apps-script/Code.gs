@@ -21,7 +21,8 @@ const SCHEMA = {
   SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
   Settings: ['key', 'value'],
   Users: ['user_id', 'username', 'display_name', 'pin_hash', 'salt', 'role', 'status', 'created_at'],
-  Sessions: ['token', 'user_id', 'expires_at']
+  Sessions: ['token', 'user_id', 'expires_at'],
+  Logs: ['datetime', 'user', 'action', 'target_type', 'target_id', 'target_name', 'details']
 };
 
 const DEFAULT_SETTINGS = {
@@ -63,7 +64,8 @@ const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, create
 const ADMIN_ACTIONS = {
   todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
-  saveSettings: saveSettings_, uploadImage: uploadImage_
+  deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
+  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_
 };
 
 function route_(req) {
@@ -100,7 +102,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v1')) return;
+  if (cache.get('setup_ok_v2')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -123,7 +125,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v1', '1', 21600);
+  cache.put('setup_ok_v2', '1', 21600);
 }
 
 function headers_(name) {
@@ -193,6 +195,56 @@ function settingsMap_() {
   return o;
 }
 
+/* ---------------- Activity log ---------------- */
+
+const LABELS = {
+  name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
+  description: 'คำอธิบาย', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
+  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR'
+};
+
+/** สรุปว่าค่าไหนเปลี่ยนจากอะไรเป็นอะไร (oldRow = null แปลว่าสร้างใหม่) */
+function diff_(oldRow, obj) {
+  const skip = ['product_id', 'variant_id', 'package_id', 'has_variants', 'stock_qty'];
+  const out = [];
+  Object.keys(obj).forEach(function (k) {
+    if (skip.indexOf(k) >= 0) return;
+    let a = oldRow ? oldRow[k] : '';
+    const b = obj[k];
+    if (typeof b === 'boolean') a = oldRow ? bool_(a) : null;
+    if (oldRow && String(a === undefined ? '' : a) === String(b)) return;
+    if (k === 'image_url' || k === 'promptpay_qr_image_url') {
+      if (!oldRow && !b) return;
+      out.push((LABELS[k] || 'รูป') + ': ' + (b ? (a ? 'เปลี่ยนรูป' : 'เพิ่มรูป') : 'ลบรูป'));
+      return;
+    }
+    if (k === 'active') { if (oldRow || !b) out.push(b ? 'เปิดขาย' : 'ปิดขาย'); return; }
+    if (!oldRow && (b === '' || b === null)) return;
+    out.push((LABELS[k] || k) + ': ' + (oldRow ? (a === '' ? '-' : a) + ' → ' : '') + (b === '' || b === null ? '-' : b));
+  });
+  return out.join(' · ');
+}
+
+function log_(user, action, type, id, name, details) {
+  try {
+    appendRow_('Logs', {
+      datetime: now_(), user: user ? str_(user.display_name) + ' (@' + str_(user.username) + ')' : '',
+      action: action, target_type: type, target_id: id || '', target_name: name || '', details: details || ''
+    });
+  } catch (e) { /* log ไม่ได้ก็ไม่ให้งานหลักล้ม */ }
+}
+
+function getLogs_(p) {
+  const limit = Math.min(2000, Math.max(1, num_(p.limit) || 500));
+  const rows = readTable_('Logs');
+  return {
+    logs: rows.slice(-limit).reverse().map(function (r) {
+      return { datetime: str_(r.datetime), user: str_(r.user), action: str_(r.action), target_type: str_(r.target_type), target_id: str_(r.target_id), target_name: str_(r.target_name), details: str_(r.details) };
+    }),
+    total: rows.length
+  };
+}
+
 /* ---------------- Auth ---------------- */
 
 function hash_(pin, salt) {
@@ -222,6 +274,7 @@ function register_(p) {
       role: first ? 'admin' : 'seller', status: first ? 'active' : 'pending', created_at: now_()
     };
     appendRow_('Users', user);
+    log_(user, 'สมัคร', 'พนักงาน', user.user_id, display, first ? 'เป็นแอดมินคนแรก' : 'รออนุมัติ');
     return { user: publicUser_(user) };
   });
 }
@@ -244,6 +297,7 @@ function login_(p) {
   const token = Utilities.getUuid() + Utilities.getUuid().slice(0, 8);
   const expires = Date.now() + SESSION_DAYS * 86400000;
   appendRow_('Sessions', { token: token, user_id: u.user_id, expires_at: String(expires) });
+  log_(u, 'เข้าสู่ระบบ', 'พนักงาน', u.user_id, u.display_name, '');
   return { token: token, user: publicUser_(u) };
 }
 
@@ -405,6 +459,8 @@ function addStock_(p, user) {
       stockin_id: nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4), datetime: now_(),
       event_name: str_(p.event_name), item_id: itemId, qty: qty, note: str_(p.note), staff: user.display_name
     });
+    log_(user, qty > 0 ? 'เพิ่มสต็อก' : 'ลดสต็อก', 'สต็อก', itemId, idx[itemId].name,
+      (qty > 0 ? '+' : '') + qty + ' → คงเหลือ ' + stock + (p.note ? ' · ' + str_(p.note) : '') + (p.event_name ? ' · งาน ' + str_(p.event_name) : ''));
     return { item_id: itemId, stock_qty: stock };
   });
 }
@@ -479,6 +535,8 @@ function createSale_(p, user) {
     };
     appendRow_('Sales', bill);
     appendRows_('SaleItems', items.map(function (it, i) { return Object.assign({ bill_id: billId, line_no: i + 1 }, it); }));
+    log_(user, 'ขาย', 'บิล', billId, '', 'ยอด ' + total + ' ฿ · ' + ({ cash: 'เงินสด', transfer: 'โอน', promptpay: 'พร้อมเพย์' })[method] +
+      (dAmount ? ' · ส่วนลด ' + dAmount + ' ฿' : '') + ' · ' + items.filter(function (i) { return !i.slot; }).map(function (i) { return i.item_name + ' ×' + i.qty; }).join(', '));
     delete bill.client_id;
     bill.items = items;
     return { bill: bill };
@@ -547,6 +605,11 @@ function updateUser_(p, admin) {
     updateRow_('Users', u._row, patch);
     CacheService.getScriptCache().remove('usr_' + u.user_id);
     if (patch.status && patch.status !== 'active') revokeSessions_(u.user_id);
+    const what = [];
+    if (patch.role && patch.role !== u.role) what.push('สิทธิ์: ' + (patch.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'));
+    if (patch.status && patch.status !== u.status) what.push(patch.status === 'active' ? (u.status === 'pending' ? 'อนุมัติ' : 'เปิดบัญชี') : patch.status === 'disabled' ? (u.status === 'pending' ? 'ไม่อนุมัติ' : 'ปิดบัญชี') : patch.status);
+    if (patch.pin_hash) what.push('รีเซ็ต PIN');
+    if (what.length) log_(admin, 'แก้ไข', 'พนักงาน', u.user_id, u.display_name, what.join(' · '));
     return { user: publicUser_(Object.assign({}, u, patch)) };
   });
 }
@@ -559,7 +622,7 @@ function revokeSessions_(userId) {
   });
 }
 
-function saveProduct_(p) {
+function saveProduct_(p, user) {
   const name = str_(p.name);
   if (!name) throw new Error('กรุณาใส่ชื่อสินค้า');
   return withLock_(function () {
@@ -577,18 +640,21 @@ function saveProduct_(p) {
       if (!r) throw new Error('ไม่พบสินค้า');
       updateRow_('Products', r._row, obj);
       catalogChanged_();
-    return { product_id: id };
+      const d = diff_(r, obj);
+      if (d) log_(user, 'แก้ไข', 'สินค้า', id, name, d);
+      return { product_id: id };
     }
     obj.product_id = nextId_(rows, 'product_id', 'P', 3);
     obj.has_variants = false;
     obj.stock_qty = 0;
     appendRow_('Products', obj);
     catalogChanged_();
+    log_(user, 'เพิ่ม', 'สินค้า', obj.product_id, name, diff_(null, obj));
     return { product_id: obj.product_id };
   });
 }
 
-function saveVariant_(p) {
+function saveVariant_(p, user) {
   return withLock_(function () {
     const productId = str_(p.product_id);
     const prod = readTable_('Products').filter(function (x) { return str_(x.product_id) === productId; })[0];
@@ -604,15 +670,19 @@ function saveVariant_(p) {
     if (!obj.size && !obj.color) throw new Error('กรุณาใส่ไซซ์หรือสี');
     if (obj.sku && rows.some(function (r) { return str_(r.sku) === obj.sku && str_(r.variant_id) !== id; })) throw new Error('SKU นี้ถูกใช้แล้ว');
     let vid = id;
+    const label = str_(prod.name) + ' ' + [obj.size, obj.color].filter(String).join('/');
     if (id) {
       const r = rows.filter(function (x) { return str_(x.variant_id) === id; })[0];
       if (!r) throw new Error('ไม่พบตัวเลือก');
       updateRow_('Variants', r._row, obj);
+      const d = diff_(r, obj);
+      if (d) log_(user, 'แก้ไข', 'ไซซ์/สี', id, label, d);
     } else {
       vid = nextId_(rows, 'variant_id', 'V', 3);
       obj.variant_id = vid;
       obj.stock_qty = 0;
       appendRow_('Variants', obj);
+      log_(user, 'เพิ่ม', 'ไซซ์/สี', vid, label, diff_(null, obj));
     }
     if (!bool_(prod.has_variants)) updateRow_('Products', prod._row, { has_variants: true });
     catalogChanged_();
@@ -620,7 +690,7 @@ function saveVariant_(p) {
   });
 }
 
-function savePackage_(p) {
+function savePackage_(p, user) {
   const name = str_(p.name);
   if (!name) throw new Error('กรุณาใส่ชื่อแพ็กเกจ');
   const slots = (p.slots || []).map(function (s) {
@@ -632,15 +702,23 @@ function savePackage_(p) {
     const rows = readTable_('Packages');
     let id = str_(p.package_id);
     const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false };
+    const slotText = function (list) { return list.map(function (x) { return x.slot + (x.qty > 1 ? '×' + x.qty : '') + '[' + x.items.join(',') + ']'; }).join(' '); };
+    let logDetail;
     if (id) {
       const r = rows.filter(function (x) { return str_(x.package_id) === id; })[0];
       if (!r) throw new Error('ไม่พบแพ็กเกจ');
       updateRow_('Packages', r._row, obj);
+      const old = loadPackages_().filter(function (k) { return k.package_id === id; })[0];
+      const d = [diff_(r, obj)];
+      if (old && slotText(old.slots) !== slotText(slots)) d.push('ช่องสินค้า: ' + slotText(old.slots) + ' → ' + slotText(slots));
+      logDetail = ['แก้ไข', d.filter(String).join(' · ')];
     } else {
       id = nextId_(rows, 'package_id', 'PK', 3);
       obj.package_id = id;
       appendRow_('Packages', obj);
+      logDetail = ['เพิ่ม', [diff_(null, obj), 'ช่องสินค้า: ' + slotText(slots)].filter(String).join(' · ')];
     }
+    if (logDetail[1]) log_(user, logDetail[0], 'แพ็กเกจ', id, name, logDetail[1]);
     const s = sh_('PackageSlots');
     readTable_('PackageSlots').filter(function (r) { return str_(r.package_id) === id; }).reverse().forEach(function (r) { s.deleteRow(r._row); });
     appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(',') }; }));
@@ -649,10 +727,15 @@ function savePackage_(p) {
   });
 }
 
-function saveSettings_(p) {
+function saveSettings_(p, user) {
   const allowed = Object.keys(DEFAULT_SETTINGS);
   return withLock_(function () {
     const rows = readTable_('Settings');
+    const before = settingsMap_();
+    const changed = {};
+    Object.keys(p || {}).forEach(function (k) { if (allowed.indexOf(k) >= 0 && str_(before[k]) !== str_(p[k])) changed[k] = str_(p[k]); });
+    const d = diff_(before, changed);
+    if (d) log_(user, 'แก้ไข', 'ตั้งค่า', '', '', d);
     Object.keys(p || {}).forEach(function (k) {
       if (allowed.indexOf(k) < 0) return;
       const r = rows.filter(function (x) { return x.key === k; })[0];
@@ -661,6 +744,116 @@ function saveSettings_(p) {
     });
     catalogChanged_();
     return { settings: settingsMap_() };
+  });
+}
+
+/* ---------------- Delete ---------------- */
+
+/** เอาสินค้าที่ถูกลบออกจากช่องของทุกแพ็กเกจ คืนชื่อแพ็กเกจที่ได้รับผลกระทบ */
+function scrubSlots_(ids) {
+  const names = {};
+  readTable_('Packages').forEach(function (k) { names[str_(k.package_id)] = str_(k.name); });
+  const affected = [];
+  readTable_('PackageSlots').forEach(function (r) {
+    const items = str_(r.allowed_items).split(',').map(function (x) { return x.trim(); }).filter(String);
+    const keep = items.filter(function (x) { return ids.indexOf(x) < 0; });
+    if (keep.length === items.length) return;
+    updateRow_('PackageSlots', r._row, { allowed_items: keep.join(',') });
+    const n = names[str_(r.package_id)] || str_(r.package_id);
+    if (affected.indexOf(n) < 0) affected.push(n);
+  });
+  return affected;
+}
+
+function deleteProduct_(p, user) {
+  return withLock_(function () {
+    const id = str_(p.product_id);
+    const r = readTable_('Products').filter(function (x) { return str_(x.product_id) === id; })[0];
+    if (!r) throw new Error('ไม่พบสินค้า');
+    const vars = readTable_('Variants').filter(function (v) { return str_(v.product_id) === id; });
+    const vs = sh_('Variants');
+    vars.slice().reverse().forEach(function (v) { vs.deleteRow(v._row); });
+    sh_('Products').deleteRow(r._row);
+    const affected = scrubSlots_([id].concat(vars.map(function (v) { return str_(v.variant_id); })));
+    catalogChanged_();
+    const stock = bool_(r.has_variants) ? vars.reduce(function (a, v) { return a + num_(v.stock_qty); }, 0) : num_(r.stock_qty);
+    log_(user, 'ลบ', 'สินค้า', id, str_(r.name), [
+      r.sku ? 'SKU ' + r.sku : '', 'ราคา ' + num_(r.price), 'สต็อกตอนลบ ' + stock,
+      vars.length ? 'ไซซ์/สี ' + vars.map(function (v) { return [str_(v.size), str_(v.color)].filter(String).join('/'); }).join(', ') : '',
+      affected.length ? 'เอาออกจากแพ็กเกจ ' + affected.join(', ') : ''
+    ].filter(String).join(' · '));
+    return { deleted: id, packages: affected };
+  });
+}
+
+function deleteVariant_(p, user) {
+  return withLock_(function () {
+    const id = str_(p.variant_id);
+    const r = readTable_('Variants').filter(function (x) { return str_(x.variant_id) === id; })[0];
+    if (!r) throw new Error('ไม่พบตัวเลือก');
+    sh_('Variants').deleteRow(r._row);
+    const prod = readTable_('Products').filter(function (x) { return str_(x.product_id) === str_(r.product_id); })[0];
+    const left = readTable_('Variants').filter(function (v) { return str_(v.product_id) === str_(r.product_id); }).length;
+    if (prod && !left) updateRow_('Products', prod._row, { has_variants: false, stock_qty: 0 });
+    const affected = scrubSlots_([id]);
+    catalogChanged_();
+    log_(user, 'ลบ', 'ไซซ์/สี', id, (prod ? str_(prod.name) + ' ' : '') + [str_(r.size), str_(r.color)].filter(String).join('/'),
+      [r.sku ? 'SKU ' + r.sku : '', 'สต็อกตอนลบ ' + num_(r.stock_qty), affected.length ? 'เอาออกจากแพ็กเกจ ' + affected.join(', ') : ''].filter(String).join(' · '));
+    return { deleted: id, packages: affected };
+  });
+}
+
+function deletePackage_(p, user) {
+  return withLock_(function () {
+    const id = str_(p.package_id);
+    const r = readTable_('Packages').filter(function (x) { return str_(x.package_id) === id; })[0];
+    if (!r) throw new Error('ไม่พบแพ็กเกจ');
+    const s = sh_('PackageSlots');
+    readTable_('PackageSlots').filter(function (x) { return str_(x.package_id) === id; }).reverse().forEach(function (x) { s.deleteRow(x._row); });
+    sh_('Packages').deleteRow(r._row);
+    catalogChanged_();
+    log_(user, 'ลบ', 'แพ็กเกจ', id, str_(r.name), 'ราคา ' + num_(r.price));
+    return { deleted: id };
+  });
+}
+
+/* ---------------- Stock count ---------------- */
+
+/**
+ * counts: [{ item_id, system_qty (สต็อกในระบบตอนเริ่มนับ), counted }]
+ * ปรับสต็อกตามส่วนต่าง (นับได้ − ระบบตอนนับ) ถ้าระหว่างนับมีการขาย ยอดขายนั้นจะยังถูกหักอยู่
+ */
+function stockCount_(p, user) {
+  const counts = (p.counts || []).filter(function (c) { return c && c.item_id !== undefined && c.counted !== '' && c.counted !== null; });
+  if (!counts.length) throw new Error('ยังไม่ได้นับสินค้ารายการไหนเลย');
+  return withLock_(function () {
+    const idx = stockIndex_();
+    const adjusted = [];
+    let matched = 0;
+    counts.forEach(function (c) {
+      const id = str_(c.item_id);
+      const it = idx[id];
+      if (!it || it.has_variants) return;
+      const counted = Math.round(num_(c.counted));
+      const delta = counted - Math.round(num_(c.system_qty));
+      if (!delta) { matched++; return; }
+      changeStock_(idx, id, delta);
+      adjusted.push({ item_id: id, name: it.name, system_qty: num_(c.system_qty), counted: counted, delta: delta, stock_qty: it.stock });
+    });
+    if (adjusted.length) {
+      flushStock_(idx);
+      const base = Number((nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4)).slice(1));
+      const when = now_();
+      appendRows_('StockIn', adjusted.map(function (a, i) {
+        return {
+          stockin_id: 'S' + pad_(base + i, 4), datetime: when, event_name: str_(p.event_name), item_id: a.item_id, qty: a.delta,
+          note: 'นับสต็อก: ระบบ ' + a.system_qty + ' นับได้ ' + a.counted + (p.note ? ' · ' + str_(p.note) : ''), staff: user.display_name
+        };
+      }));
+    }
+    log_(user, 'นับสต็อก', 'สต็อก', '', str_(p.note), 'นับ ' + counts.length + ' รายการ · ตรง ' + matched + ' · ปรับ ' + adjusted.length +
+      (adjusted.length ? ' — ' + adjusted.map(function (a) { return a.name + ' ' + a.system_qty + '→' + a.counted; }).join(', ') : ''));
+    return { checked: counts.length, matched: matched, adjusted: adjusted };
   });
 }
 
@@ -682,7 +875,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v1');
+  CacheService.getScriptCache().remove('setup_ok_v2');
   ensureSetup_();
   imageFolder_();
   Logger.log('Setup done. Users so far: ' + readTable_('Users').length);

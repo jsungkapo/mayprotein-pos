@@ -44,13 +44,41 @@
 .urow .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .urow select{width:auto;padding:6px 8px;font-size:14px}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
+#mConfirm{z-index:40;align-items:center}
+#mConfirm .sheet{border-radius:16px;max-width:400px;margin:16px}
+#mConfirm .msg{font-size:14px;color:#444;line-height:1.5;margin:6px 0 16px;white-space:pre-line}
+#mConfirm .row .btn{padding:12px}
+/* stock count */
+.cnt-top{position:sticky;top:46px;z-index:4;background:var(--bg);padding-bottom:6px}
+.prog{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;margin:8px 0}
+.prog span{background:#fff;border-radius:12px;padding:4px 10px}
+.bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .2s}
+.crow{display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:10px;margin-bottom:6px;border:2px solid transparent}
+.crow .t{flex:1;min-width:0}
+.crow .t b{display:block;font-size:14px;line-height:1.3}
+.crow .t small{color:var(--muted);font-size:12px}
+.crow input{width:72px;flex:none;text-align:center;font-size:18px;font-weight:700;padding:8px 4px}
+.crow .tick{width:44px;height:44px;flex:none;border-radius:50%;border:2px solid #ccc;background:#fff;font-size:22px;color:#ccc;line-height:1}
+.crow.ok{border-color:#bfe6cf;background:#f3fbf6}.crow.ok .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+.crow.diff{border-color:#f5d48a;background:#fffaf0}
+.crow .dv{font-size:12px;font-weight:700;color:var(--warn)}
+.crow .cat-h{font-weight:700}
+.grp{font-size:13px;font-weight:700;color:var(--muted);margin:12px 4px 6px}
+/* log */
+.lrow{background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:6px;font-size:13px}
+.lrow .h{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.lrow .who{color:var(--muted);font-size:12px}
+.lrow .d{margin-top:4px;color:#444;line-height:1.45;word-break:break-word}
+.act{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eee;margin-right:4px}
+.act.add{background:#e1f5ea;color:var(--ok)}.act.del{background:#fde4e4;color:var(--bad)}.act.edit{background:#e7efff;color:#2f5bd3}.act.sale{background:var(--pink-soft);color:var(--pink)}.act.stock{background:#fff3d6;color:var(--warn)}
 </style></head><body>
 <header class="top">
   <div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" style="color:#fff">← กลับหน้าขาย</a></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
-  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="set">ตั้งค่า</button>
+  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set">ตั้งค่า</button>
 </div>
 <div class="wrap">
   <div class="page on" id="p-prod">
@@ -62,11 +90,30 @@
     <div class="list" id="pkgList"></div>
   </div>
   <div class="page" id="p-users"><div id="userList"></div></div>
+  <div class="page" id="p-count">
+    <div class="cnt-top">
+      <div class="box" style="margin-bottom:6px">
+        <div class="row"><input id="cNote" placeholder="หมายเหตุ เช่น ปิดงาน Fit Expo"></div>
+        <div class="prog" id="cProg"></div>
+        <div class="bar"><i id="cBar" style="width:0"></i></div>
+      </div>
+      <div class="row" style="gap:6px"><input id="cQ" placeholder="🔍 ค้นหา"><select id="cF" style="flex:none;width:130px"><option value="all">ทั้งหมด</option><option value="todo">ยังไม่นับ</option><option value="diff">ไม่ตรง</option><option value="ok">ตรงแล้ว</option></select></div>
+    </div>
+    <div id="cList"></div>
+    <div class="hint" style="margin:8px 4px">ติ๊ก ✓ ถ้านับได้ตรงกับในระบบ หรือพิมพ์จำนวนที่นับได้ถ้าไม่ตรง · ระบบจำที่นับไว้ในเครื่องนี้ ปิดแอปแล้วกลับมานับต่อได้</div>
+    <button class="btn" id="cSave">บันทึกผลการนับ</button><br><br>
+    <button class="btn g" id="cClear">ล้างที่นับไว้ทั้งหมด</button><br><br>
+  </div>
+  <div class="page" id="p-log">
+    <div class="row" style="gap:6px;margin-bottom:10px"><input id="lQ" placeholder="🔍 ค้นหา ชื่อสินค้า / คน / บิล"><select id="lF" style="flex:none;width:130px"><option value="">ทั้งหมด</option><option>ขาย</option><option value="สต็อก">สต็อก</option><option>สินค้า</option><option>ไซซ์/สี</option><option>แพ็กเกจ</option><option>พนักงาน</option><option>ตั้งค่า</option><option value="@ลบ">เฉพาะที่ลบ</option></select></div>
+    <div id="logList"></div>
+  </div>
   <div class="page" id="p-set"><div class="box" id="setBox"></div></div>
 </div>
 
 <div class="modal" id="mEdit"><div class="sheet" id="editSheet"></div></div>
 <div class="modal" id="mSub"><div class="sheet" id="subSheet"></div></div>
+<div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
 <script src="config.js"></script>
@@ -91,6 +138,8 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
   if (b.dataset.t === 'users') load();
+  if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); }
+  if (b.dataset.t === 'log') loadLogs();
 });
 $('qProd').oninput = renderProducts;
 
@@ -166,6 +215,18 @@ async function waitUploads(btn) {
 }
 const isTemp = u => String(u || '').startsWith('data:');
 
+/* ---------- confirm popup ---------- */
+function confirmBox(title, msg, yesText, danger) {
+  return new Promise(resolve => {
+    $('cfTitle').textContent = title; $('cfMsg').textContent = msg || '';
+    const y = $('cfYes'); y.textContent = yesText || 'ยืนยัน'; y.style.background = danger ? 'var(--bad)' : '';
+    const done = v => { $('mConfirm').classList.remove('on'); resolve(v); };
+    y.onclick = () => done(true); $('cfNo').onclick = () => done(false);
+    $('mConfirm').classList.add('on');
+  });
+}
+function pkgsUsing(ids) { return D.packages.filter(k => k.slots.some(s => s.items.some(i => ids.includes(i)))).map(k => k.name); }
+
 /* ---------- products ---------- */
 function renderProducts() {
   const q = $('qProd').value.trim().toLowerCase();
@@ -209,10 +270,22 @@ function editProduct(id, copy) {
         ${vs.map(v => `<div class="vrow" onclick="editVariant('${id}','${v.variant_id}')"><span>${esc(vLabel(v))} <small style="color:#888">${esc(v.sku)}</small>${v.active ? '' : '<span class="tag">ปิด</span>'}</span><span>${money(v.price == null ? p.price : v.price)}฿ · สต็อก ${v.stock_qty}</span></div>`).join('') || '<div class="hint">ไม่มี — ถ้าสินค้ามีไซซ์หรือสีให้เลือก (เช่น ถุงเท้า) ให้กดเพิ่ม แต่ละตัวเลือกจะมี SKU และสต็อกแยกกัน</div>'}
       </div>` : copyVars.length ? '' : '<div class="hint" style="margin-top:12px">บันทึกสินค้าก่อน แล้วจึงเพิ่มไซซ์/สีได้</div>'}
       <br><button class="btn" id="fSave">บันทึก</button>
-      ${id ? '<br><br><button class="btn line" id="fCopy">📄 คัดลอกเป็นสินค้าใหม่</button>' : ''}
+      ${id ? '<br><br><button class="btn line" id="fCopy">📄 คัดลอกเป็นสินค้าใหม่</button><br><br><button class="btn danger" id="fDel">🗑 ลบสินค้านี้</button>' : ''}
       <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => p.image_url, (u, re) => { if (re === false) { p.image_url = u; return; } keep(); p.image_url = u; render(); }, 'sq');
     $('fSave').onclick = save;
+    if (id) $('fDel').onclick = async () => {
+      const vs = varsOf(id), used = pkgsUsing([id, ...vs.map(v => v.variant_id)]);
+      const ok = await confirmBox('ลบ "' + P(id).name + '"?', [
+        vs.length ? `ไซซ์/สีทั้ง ${vs.length} ตัวเลือกจะถูกลบด้วย` : '',
+        used.length ? 'สินค้านี้จะถูกเอาออกจากแพ็กเกจ: ' + used.join(', ') : '',
+        'ประวัติการขายเดิมยังอยู่ครบ แต่ลบแล้วกู้คืนไม่ได้'
+      ].filter(Boolean).join('\n'), 'ลบสินค้า', true);
+      if (!ok) return;
+      const b = $('fDel'); busy(b, true);
+      try { await POS.call('deleteProduct', { product_id: id }); POS.toast('ลบแล้ว'); closeM('mEdit'); D.products = D.products.filter(x => x.product_id !== id); renderProducts(); load(); }
+      catch (e) { POS.toast(e.message, true); busy(b, false); }
+    };
     if (id) $('fCopy').onclick = () => {
       if (uploads.size) return POS.toast('รอให้อัปโหลดรูปเสร็จก่อน', true);
       keep();
@@ -258,7 +331,15 @@ function editVariant(pid, vid) {
     <div class="row"><div><label>ราคา (เว้นว่าง = ${money(p.price)})</label><input id="vPrice" type="number" inputmode="decimal" value="${v.price ?? ''}"></div><div><label>ต้นทุน (เว้นว่าง = ตามสินค้าหลัก)</label><input id="vCost" type="number" inputmode="decimal" value="${v.cost ?? ''}"></div></div>
     <label class="chk"><input type="checkbox" id="vAct" ${v.active ? 'checked' : ''}> เปิดขาย</label>
     ${vid ? `<div class="hint">สต็อกปัจจุบัน ${v.stock_qty}</div>` : ''}
-    <br><button class="btn" id="vSave">บันทึก</button><br><br><button class="btn g" onclick="closeM('mSub')">ยกเลิก</button>`;
+    <br><button class="btn" id="vSave">บันทึก</button>${vid ? '<br><br><button class="btn danger" id="vDel">🗑 ลบตัวเลือกนี้</button>' : ''}<br><br><button class="btn g" onclick="closeM('mSub')">ยกเลิก</button>`;
+  if (vid) $('vDel').onclick = async () => {
+    const used = pkgsUsing([vid]);
+    const ok = await confirmBox('ลบ ' + p.name + ' ' + vLabel(v) + '?', [used.length ? 'จะถูกเอาออกจากแพ็กเกจ: ' + used.join(', ') : '', 'ลบแล้วกู้คืนไม่ได้'].filter(Boolean).join('\n'), 'ลบ', true);
+    if (!ok) return;
+    const b = $('vDel'); busy(b, true);
+    try { await POS.call('deleteVariant', { variant_id: vid }); POS.toast('ลบแล้ว'); closeM('mSub'); await load(); editProduct(pid); }
+    catch (e) { POS.toast(e.message, true); busy(b, false); }
+  };
   $('vSave').onclick = async () => {
     const b = $('vSave'); busy(b, true);
     try {
@@ -309,13 +390,20 @@ function editPackage(id, copy) {
         <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
       </div>
       <br><button class="btn" id="kSave">บันทึก</button>
-      ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button>' : ''}
+      ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button><br><br><button class="btn danger" id="kDel">🗑 ลบแพ็กเกจนี้</button>' : ''}
       <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
     $('addSlot').onclick = () => { keep(); const used = k.slots.map(s => s.slot); let c = 65; while (used.includes(String.fromCharCode(c))) c++; k.slots.push({ slot: String.fromCharCode(c), qty: 1, items: [] }); render(); };
     el.querySelectorAll('[data-del]').forEach(a => a.onclick = () => { keep(); k.slots.splice(+a.dataset.del, 1); render(); });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
     el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
+    if (id) $('kDel').onclick = async () => {
+      const ok = await confirmBox('ลบแพ็กเกจ "' + src.name + '"?', 'ยอดขายแพ็กเกจนี้ที่ขายไปแล้วยังอยู่ในประวัติ แต่ลบแล้วกู้คืนไม่ได้\nถ้าแค่อยากหยุดขายชั่วคราว ให้เอาติ๊ก "เปิดขาย" ออกแทน', 'ลบแพ็กเกจ', true);
+      if (!ok) return;
+      const b = $('kDel'); busy(b, true);
+      try { await POS.call('deletePackage', { package_id: id }); POS.toast('ลบแล้ว'); closeM('mEdit'); D.packages = D.packages.filter(x => x.package_id !== id); renderPackages(); load(); }
+      catch (e) { POS.toast(e.message, true); busy(b, false); }
+    };
     if (id) $('kCopy').onclick = () => {
       if (uploads.size) return POS.toast('รอให้อัปโหลดรูปเสร็จก่อน', true);
       keep();
@@ -338,6 +426,103 @@ function editPackage(id, copy) {
   $('mEdit').classList.add('on');
   el.scrollTop = 0;
 }
+
+/* ---------- stock count ---------- */
+const COUNT_KEY = 'pos_count_draft';
+let draft = (() => { try { return JSON.parse(localStorage.getItem(COUNT_KEY) || 'null') || { items: {} }; } catch (e) { return { items: {} }; } })();
+const saveDraft = () => { try { localStorage.setItem(COUNT_KEY, JSON.stringify(draft)); } catch (e) {} };
+function countItems() {
+  const a = [];
+  D.products.forEach(p => {
+    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: p.name + ' ' + vLabel(v), sku: v.sku, cat: p.category || 'อื่นๆ', stock: v.stock_qty }));
+    else a.push({ id: p.product_id, name: p.name, sku: p.sku, cat: p.category || 'อื่นๆ', stock: p.stock_qty });
+  });
+  return a;
+}
+function cState(it) {
+  const d = draft.items[it.id];
+  if (!d || d.counted === '' || d.counted == null) return { sys: it.stock, counted: '', st: 'todo' };
+  return { sys: d.system_qty, counted: d.counted, st: +d.counted === +d.system_qty ? 'ok' : 'diff' };
+}
+function renderCount() {
+  const all = countItems();
+  const q = $('cQ').value.trim().toLowerCase(), f = $('cF').value;
+  $('cNote').value = draft.note || '';
+  const st = all.map(it => ({ it, s: cState(it) }));
+  const done = st.filter(x => x.s.st !== 'todo').length, diff = st.filter(x => x.s.st === 'diff').length;
+  $('cProg').innerHTML = `<span>นับแล้ว <b>${done}</b> / ${all.length}</span><span style="color:var(--ok)">ตรง ${done - diff}</span><span style="color:var(--warn)">ไม่ตรง ${diff}</span>`;
+  $('cBar').style.width = all.length ? (done / all.length * 100) + '%' : 0;
+  $('cSave').textContent = done ? `บันทึกผลการนับ (${done} รายการ)` : 'บันทึกผลการนับ';
+  const show = st.filter(x => (f === 'all' || x.s.st === f) && (!q || (x.it.name + ' ' + (x.it.sku || '')).toLowerCase().includes(q)));
+  let html = '', last = null;
+  show.forEach(({ it, s }) => {
+    if (it.cat !== last) { html += `<div class="grp">${esc(it.cat)}</div>`; last = it.cat; }
+    const dv = s.st === 'diff' ? (s.counted - s.sys > 0 ? '+' : '') + (s.counted - s.sys) : '';
+    html += `<div class="crow ${s.st}" data-id="${esc(it.id)}"><div class="t"><b>${esc(it.name)}</b><small>ในระบบ ${s.sys}${s.st !== 'todo' && s.sys !== it.stock ? ` (ตอนนี้ ${it.stock})` : ''}</small> ${dv ? `<span class="dv">ต่าง ${dv}</span>` : ''}</div>
+      <input type="number" inputmode="numeric" pattern="[0-9]*" placeholder="นับได้" value="${s.counted}"><button class="tick" title="ตรงกับในระบบ">✓</button></div>`;
+  });
+  $('cList').innerHTML = html || '<div class="empty">ไม่มีรายการ</div>';
+  $('cList').querySelectorAll('.crow').forEach(row => {
+    const id = row.dataset.id, it = all.find(x => x.id === id);
+    const set = v => {
+      if (v === '' || v == null) delete draft.items[id];
+      else draft.items[id] = { system_qty: draft.items[id] ? draft.items[id].system_qty : it.stock, counted: Math.max(0, Math.round(+v)) };
+      saveDraft();
+    };
+    row.querySelector('input').onchange = e => { set(e.target.value.trim()); renderCount(); };
+    row.querySelector('.tick').onclick = () => {
+      const s = cState(it);
+      if (s.st === 'ok') set(''); else { delete draft.items[id]; set(it.stock); }
+      renderCount();
+    };
+  });
+}
+$('cQ').oninput = renderCount; $('cF').onchange = renderCount;
+$('cNote').oninput = () => { draft.note = $('cNote').value; saveDraft(); };
+$('cClear').onclick = async () => {
+  if (!Object.keys(draft.items).length) return;
+  if (!await confirmBox('ล้างที่นับไว้ทั้งหมด?', 'จำนวนที่นับไว้ในเครื่องนี้จะหายไป (ยังไม่ได้บันทึกเข้าระบบ)', 'ล้าง', true)) return;
+  draft = { items: {} }; saveDraft(); renderCount();
+};
+$('cSave').onclick = async () => {
+  const all = countItems();
+  const counts = Object.keys(draft.items).filter(id => all.some(x => x.id === id)).map(id => ({ item_id: id, system_qty: draft.items[id].system_qty, counted: draft.items[id].counted }));
+  if (!counts.length) return POS.toast('ยังไม่ได้นับสินค้ารายการไหนเลย', true);
+  const diffs = counts.filter(c => +c.counted !== +c.system_qty);
+  const lines = diffs.slice(0, 12).map(c => `• ${itemName(c.item_id)}: ${c.system_qty} → ${c.counted}`);
+  if (diffs.length > 12) lines.push(`… และอีก ${diffs.length - 12} รายการ`);
+  const ok = await confirmBox(`บันทึกผลการนับ ${counts.length} รายการ?`, diffs.length ? `จะปรับสต็อกให้ตรงกับที่นับได้ ${diffs.length} รายการ:\n` + lines.join('\n') : 'ทุกรายการตรงกับในระบบ ไม่ต้องปรับสต็อก', 'บันทึก');
+  if (!ok) return;
+  const b = $('cSave'); busy(b, true);
+  try {
+    const r = await POS.call('stockCount', { counts, note: draft.note || '' });
+    draft = { items: {} }; saveDraft();
+    POS.toast(`บันทึกแล้ว · ตรง ${r.matched} · ปรับ ${r.adjusted.length} รายการ`);
+    busy(b, false); await load(); renderCount();
+  } catch (e) { POS.toast(e.message, true); busy(b, false); }
+};
+
+/* ---------- activity log ---------- */
+let LOGS = [];
+const ACT_CLASS = { 'เพิ่ม': 'add', 'สมัคร': 'add', 'ลบ': 'del', 'แก้ไข': 'edit', 'ขาย': 'sale', 'เพิ่มสต็อก': 'stock', 'ลดสต็อก': 'stock', 'นับสต็อก': 'stock' };
+async function loadLogs() {
+  if (!LOGS.length) $('logList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
+  try { const r = await POS.call('getLogs', { limit: 500 }); LOGS = r.logs; renderLogs(); }
+  catch (e) { POS.toast(e.message, true); }
+}
+function renderLogs() {
+  const q = $('lQ').value.trim().toLowerCase(), f = $('lF').value;
+  const rows = LOGS.filter(l => (!f || (f === '@ลบ' ? l.action === 'ลบ' : l.target_type === f)) && (!q || [l.user, l.target_name, l.target_id, l.details, l.action].join(' ').toLowerCase().includes(q)));
+  let html = '', day = null;
+  rows.forEach(l => {
+    const d = l.datetime.slice(0, 10);
+    if (d !== day) { html += `<div class="grp">${esc(d)}</div>`; day = d; }
+    html += `<div class="lrow"><div class="h"><span><span class="act ${ACT_CLASS[l.action] || ''}">${esc(l.action)}</span><b>${esc(l.target_type)}</b> ${esc(l.target_name || l.target_id)}</span><span class="who">${esc(l.datetime.slice(11, 16))}</span></div>
+      <div class="who">${esc(l.user)}</div>${l.details ? `<div class="d">${esc(l.details)}</div>` : ''}</div>`;
+  });
+  $('logList').innerHTML = html || '<div class="empty">ยังไม่มีประวัติ</div>';
+}
+$('lQ').oninput = renderLogs; $('lF').onchange = renderLogs;
 
 /* ---------- users ---------- */
 const ST = { active: ['ok', 'ใช้งาน'], pending: ['warn', 'รออนุมัติ'], disabled: ['bad', 'ปิดใช้งาน'] };
