@@ -217,6 +217,29 @@
       });
     },
 
+    /** รหัสไฟล์ Google Drive จากลิงก์รูป */
+    driveId(url) { const m = String(url || '').match(/\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})/); return m ? (m[1] || m[2]) : ''; },
+
+    /** รูปจาก Drive โหลดไม่ขึ้น: ลองลิงก์แบบ thumbnail แทน ถ้ายังไม่ได้ก็ซ่อน (ใช้ใน onerror) */
+    imgFix(img) {
+      const id = POS.driveId(img.getAttribute('src'));
+      if (id && !img.dataset.tried) { img.dataset.tried = '1'; img.src = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1000'; return; }
+      if (img.dataset.keep) return;
+      img.style.visibility = 'hidden';
+    },
+
+    /** โหลดรูปผ่านเซิร์ฟเวอร์ (ไม่พึ่งลิงก์สาธารณะของ Drive) แล้วจำไว้ในเครื่อง คืน data URI */
+    async imageData(url) {
+      if (!url) return '';
+      const key = 'pos_img_' + POS.driveId(url);
+      const hit = LS.get(key);
+      if (hit) return hit;
+      const r = await POS.call('getImage', { url });
+      const data = 'data:' + r.mime + ';base64,' + r.data;
+      LS.set(key, data);
+      return data;
+    },
+
     uuid() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
       return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2);

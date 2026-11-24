@@ -245,7 +245,7 @@ function pickFile() {
 }
 function imgBlock(url, fallback, extra) {
   const up = String(url || '').startsWith('data:');
-  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="">` : fallback}${up ? '<div class="up"><span class="spin"></span> กำลังอัปโหลด</div>' : ''}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
+  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="" onerror="POS.imgFix(this)">` : fallback}${up ? '<div class="up"><span class="spin"></span> กำลังอัปโหลด</div>' : ''}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
 }
 function bindImg(root, getUrl, setUrl, mode) {
   const b1 = root.querySelector('[data-act="img"]'), b2 = root.querySelector('[data-act="noimg"]');
@@ -303,7 +303,7 @@ function renderProducts() {
   $('prodList').innerHTML = rows.map(p => {
     const vs = varsOf(p.product_id);
     const st = p.has_variants ? vs.reduce((a, v) => a + v.stock_qty, 0) : p.stock_qty;
-    return `<div class="it ${p.active ? '' : 'off'}" onclick="editProduct('${p.product_id}')"><div class="thumb">${p.image_url ? `<img src="${esc(p.image_url)}" loading="lazy">` : '📦'}</div>
+    return `<div class="it ${p.active ? '' : 'off'}" onclick="editProduct('${p.product_id}')"><div class="thumb">${p.image_url ? `<img src="${esc(p.image_url)}" loading="lazy" onerror="POS.imgFix(this)">` : '📦'}</div>
       <div class="t"><b>${esc(p.name)}${p.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${esc(p.sku || '-')} · ${esc([p.category, p.subcategory].filter(Boolean).join(' › '))}${p.has_variants ? ` · ${vs.length} ตัวเลือก` : ''}</small></div>
       <div class="r"><b>${money(p.price)}฿</b><br><small style="color:${st <= 0 ? 'var(--bad)' : 'var(--muted)'}">สต็อก ${st}</small></div></div>`;
   }).join('') || '<div class="empty">ยังไม่มีสินค้า</div>';
@@ -429,7 +429,7 @@ function sellables() {
   return a;
 }
 function renderPackages() {
-  $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}">` : '🎁'}</div>
+  $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}" onerror="POS.imgFix(this)">` : '🎁'}</div>
     <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${(d => `รวม ${d.total} ชิ้น · ติดแพ็กเกจ ${d.fixed.reduce((a, f) => a + f.qty, 0)} · ให้เลือก ${d.pool.length} รายการ`)(pkgDef(k))}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
 }
 /** แปลงแพ็กเกจเป็นรูปแบบใหม่: fixed = ติดแพ็กเกจ, pool = ให้ลูกค้าเลือกเอง, total = จำนวนชิ้นทั้งหมด */

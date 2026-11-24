@@ -51,6 +51,8 @@ main{flex:1;overflow-y:auto;min-height:0}
 .slip .t{flex:1;font-size:13px;color:#555}
 .slip .t b{display:block;color:var(--text);font-size:14px}
 .slip .acts{display:flex;flex-direction:column;gap:6px}
+.sliptag{border:1px solid var(--pink);background:var(--pink-soft);color:var(--pink);font-weight:700;padding:3px 9px}
+#mSlip{z-index:45}
 #mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
 #dayTable td,#dayTable th{font-size:13px;padding:6px 4px}
 .qrimg{display:block;max-width:280px;width:100%;margin:10px auto;border-radius:8px}
@@ -213,7 +215,7 @@ function vName(v) { const p = P(v.product_id); return (p ? p.name : '') + ' ' + 
 function vPrice(v) { return v.price == null ? (P(v.product_id) || {}).price || 0 : v.price; }
 function itemName(id) { const p = P(id); if (p) return p.name; const v = V(id); return v ? vName(v) : id; }
 function itemStock(id) { const p = P(id); if (p && !p.has_variants) return p.stock_qty; const v = V(id); return v ? v.stock_qty : null; }
-function imgHtml(url, fallback) { return url ? `<img src="${esc(url)}" loading="lazy" alt="">` : fallback; }
+function imgHtml(url, fallback) { return url ? `<img src="${esc(url)}" loading="lazy" alt="" onerror="POS.imgFix(this)">` : fallback; }
 function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'; }
 
 /* ---------- boot ---------- */
@@ -243,6 +245,14 @@ function applyCatalog() {
   showEvent();
   cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
   renderChips(); renderCart();
+  preloadQr();
+}
+/* รูป QR: โหลดผ่านเซิร์ฟเวอร์แล้วจำไว้ในเครื่อง จะได้ขึ้นแน่นอนและเร็ว แม้ลิงก์ Drive ใช้ไม่ได้ */
+let qrSrc = '';
+async function preloadQr() {
+  const url = cat.settings.promptpay_qr_image_url;
+  if (!url) { qrSrc = ''; return; }
+  try { qrSrc = await POS.imageData(url); if ($('qrImg')) $('qrImg').src = qrSrc; } catch (e) { qrSrc = ''; }
 }
 function saveCatalogCache() { try { localStorage.setItem(CAT_CACHE, JSON.stringify(cat)); } catch (e) {} }
 async function loadCatalog() {
@@ -444,11 +454,11 @@ function renderQr() {
   if (method !== 'transfer') { box.style.display = 'none'; return; }
   box.style.display = 'block';
   const url = cat.settings.promptpay_qr_image_url;
-  box.innerHTML = url ? `<img class="qrimg" src="${esc(url)}" alt="QR"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty" style="padding:6px 0">ยังไม่ได้อัปโหลดรูป QR พร้อมเพย์ (ตั้งค่าได้ที่หลังบ้าน) · ลูกค้าโอนเข้าบัญชีได้ตามปกติ</div>';
+  box.innerHTML = url ? `<img class="qrimg" id="qrImg" src="${esc(qrSrc || url)}" alt="QR" data-keep="1" onerror="POS.imgFix(this)"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty" style="padding:6px 0">ยังไม่ได้อัปโหลดรูป QR พร้อมเพย์ (ตั้งค่าได้ที่หลังบ้าน) · ลูกค้าโอนเข้าบัญชีได้ตามปกติ</div>';
 }
 function showQrFull() {
   const url = cat.settings.promptpay_qr_image_url;
-  $('qrFull').innerHTML = `<img src="${esc(url)}" alt="QR"><div class="amt">${money(calc().net)} บาท</div><div style="color:#888">แตะเพื่อปิด</div>`;
+  $('qrFull').innerHTML = `<img src="${esc(qrSrc || url)}" alt="QR" onerror="POS.imgFix(this)"><div class="amt">${money(calc().net)} บาท</div><div style="color:#888">แตะเพื่อปิด</div>`;
   $('qrFull').classList.add('on');
 }
 async function pay() {
@@ -490,7 +500,7 @@ function receiptHtml(b) {
   <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
   <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
   ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}
-  ${b.slip_url ? `<div class="r"><small>📎 ${POS.isAdmin() ? `<a onclick="viewSlip('${esc(b.bill_id)}')">ดูรูปสลิป</a>` : 'เก็บรูปสลิปแล้ว'}</small></div>` : ''}</div>`;
+  ${b.slip_url ? `<div class="r">${POS.isAdmin() ? `<button class="btn sm line" style="margin-top:6px" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูรูปสลิป</button>` : '<small>📎 เก็บรูปสลิปแล้ว</small>'}</div>` : ''}</div>`;
 }
 
 /* ---------- today bills (admin) ---------- */
@@ -503,7 +513,7 @@ async function loadToday(force) {
 function renderBills() {
   const bs = today.bills;
   $('bCnt').textContent = bs.length; $('bSum').textContent = money(bs.reduce((a, b) => a + b.total, 0));
-  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? '<span class="tag">📎 สลิป</span>' : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
 }
 
 /* ---------- slip viewer ---------- */

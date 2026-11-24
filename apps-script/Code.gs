@@ -63,7 +63,7 @@ function json_(o) {
 }
 
 const PUBLIC_ACTIONS = { register: register_, login: login_ };
-const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_ };
 const ADMIN_ACTIONS = {
   todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
@@ -646,8 +646,24 @@ function getSlip_(p) {
   if (!bill) throw new Error('ไม่พบบิล');
   const m = str_(bill.slip_url).match(/\/d\/([^/]+)/);
   if (!m) throw new Error('บิลนี้ไม่มีรูปสลิป');
-  const blob = DriveApp.getFileById(m[1]).getBlob();
-  return { bill_id: str_(bill.bill_id), mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()), url: str_(bill.slip_url) };
+  let blob;
+  try { blob = DriveApp.getFileById(m[1]).getBlob(); }
+  catch (e) { throw new Error('เปิดไฟล์สลิปใน Drive ไม่ได้: ' + (e && e.message ? e.message : e)); }
+  return { bill_id: str_(bill.bill_id), mime: blob.getContentType() || 'image/jpeg', data: Utilities.base64Encode(blob.getBytes()), url: str_(bill.slip_url) };
+}
+
+/** ส่งรูปสินค้า/รูป QR (เฉพาะไฟล์ในโฟลเดอร์รูปของระบบ) กลับเป็น base64 — ใช้เมื่อเปิดลิงก์สาธารณะของ Drive ไม่ได้ */
+function getImage_(p) {
+  const m = str_(p.url).match(/\/d\/([\w-]{20,})|[?&]id=([\w-]{20,})/);
+  if (!m) throw new Error('ลิงก์รูปไม่ถูกต้อง');
+  const file = DriveApp.getFileById(m[1] || m[2]);
+  const folderId = imageFolder_().getId();
+  let inFolder = false;
+  const parents = file.getParents();
+  while (parents.hasNext()) if (parents.next().getId() === folderId) inFolder = true;
+  if (!inFolder) throw new Error('ไม่อนุญาตให้เปิดไฟล์นี้');
+  const blob = file.getBlob();
+  return { mime: blob.getContentType() || 'image/png', data: Utilities.base64Encode(blob.getBytes()) };
 }
 
 /* ---------------- Admin ---------------- */
