@@ -109,7 +109,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px;borde
 <h3>ชำระเงิน</h3>
 <div class="tot"><span>รวม</span><span id="sub">0</span></div>
 <label>ส่วนลดท้ายบิล</label>
-<div class="row"><input type="number" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()"><option value="baht">บาท</option><option value="pct">%</option></select></div>
+<div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()"><option value="baht">บาท</option><option value="pct">%</option></select></div>
 <label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
 <label>วิธีชำระเงิน</label>
 <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน</button><button data-m="promptpay">📱 พร้อมเพย์</button></div>
