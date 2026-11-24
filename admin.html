@@ -21,10 +21,12 @@
 .list .it .r{text-align:right;font-size:13px}
 .list .it.off{opacity:.55}
 .imgEdit{display:flex;gap:12px;align-items:center;margin:4px 0 6px}
-.imgEdit .pv{width:110px;height:110px;border-radius:12px;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-size:36px;overflow:hidden;flex:none}
+.imgEdit .pv{position:relative;width:110px;height:110px;border-radius:12px;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-size:36px;overflow:hidden;flex:none}
 .imgEdit .pv img{width:100%;height:100%;object-fit:cover}
 .imgEdit .pv.qr{width:150px;height:auto;min-height:110px;background:#f3f3f3}
 .imgEdit .pv.qr img{height:auto}
+.imgEdit .up{position:absolute;left:0;right:0;bottom:0;background:#000a;color:#fff;font-size:11px;padding:5px;text-align:center}
+.imgEdit .up .spin{width:12px;height:12px;border-width:2px}
 .imgEdit .bt{display:flex;flex-direction:column;gap:8px}
 .chk{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:15px}
 .chk input{width:22px;height:22px}
@@ -82,7 +84,8 @@ function closeM(m) { $(m).classList.remove('on'); }
 function busy(btn, on, txt) { btn.disabled = on; if (on) { btn._t = btn.textContent; btn.innerHTML = '<span class="spin"></span>'; } else btn.textContent = txt || btn._t; }
 function opts(arr, cur) { const a = arr.includes(cur) || !cur ? arr : [cur, ...arr]; return '<option value="">—</option>' + a.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 
-POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true });
+// เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true }));
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
@@ -91,14 +94,25 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
 });
 $('qProd').oninput = renderProducts;
 
+const ADMIN_CACHE = 'pos_admin_cache';
 async function load() {
-  try { D = await POS.call('getAdminData'); renderAll(); }
-  catch (e) { POS.toast(e.message, true); $('prodList').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="load()">ลองใหม่</a></div>`; }
+  if (!D.products.length) {
+    try { const c = JSON.parse(localStorage.getItem(ADMIN_CACHE) || 'null'); if (c && c.products) { D = c; renderAll(); } } catch (e) {}
+  }
+  try {
+    const r = await POS.call('getAdminData'); delete r.ok; D = r; renderAll();
+    try { localStorage.setItem(ADMIN_CACHE, JSON.stringify(D)); } catch (e) {}
+  } catch (e) {
+    POS.toast(e.message, true);
+    if (!D.products.length) $('prodList').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="load()">ลองใหม่</a></div>`;
+  }
 }
 function renderAll() { renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
 
 /* ---------- image picking ---------- */
-function pickImage(mode) {
+// รูปจะขึ้นตัวอย่างทันที แล้วอัปโหลดไป Google Drive เบื้องหลัง ปุ่มบันทึกจะรอให้อัปโหลดเสร็จก่อน
+const uploads = new Set();
+function pickFile() {
   return new Promise(resolve => {
     const f = $('fileIn'); f.value = '';
     let picked = false, done = false;
@@ -107,27 +121,50 @@ function pickImage(mode) {
     const onFocus = () => setTimeout(() => { if (!picked && !f.files.length) finish(null); }, 3000);
     f.oncancel = () => finish(null);
     window.addEventListener('focus', onFocus);
-    f.onchange = async () => {
-      const file = f.files[0]; if (!file) return finish(null);
-      picked = true;
-      try {
-        const data = mode === 'qr' ? await POS.scaledImage(file, 1000) : await POS.squareImage(file, 600);
-        POS.toast('กำลังอัปโหลดรูป...');
-        const r = await POS.call('uploadImage', { data, mime: mode === 'qr' ? 'image/png' : 'image/jpeg', name: mode });
-        finish(r.url);
-      } catch (e) { POS.toast(e.message, true); finish(null); }
-    };
+    f.onchange = () => { picked = true; finish(f.files[0] || null); };
     f.click();
   });
 }
 function imgBlock(url, fallback, extra) {
-  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="">` : fallback}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
+  const up = String(url || '').startsWith('data:');
+  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="">` : fallback}${up ? '<div class="up"><span class="spin"></span> กำลังอัปโหลด</div>' : ''}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
 }
 function bindImg(root, getUrl, setUrl, mode) {
   const b1 = root.querySelector('[data-act="img"]'), b2 = root.querySelector('[data-act="noimg"]');
-  b1.onclick = async () => { busy(b1, true); const u = await pickImage(mode); busy(b1, false); if (u) setUrl(u); };
-  if (b2) b2.onclick = () => { if (confirm('ลบรูปนี้?')) setUrl(''); };
+  b1.onclick = async () => {
+    const file = await pickFile();
+    if (!file) return;
+    busy(b1, true);
+    let data;
+    try { data = mode === 'qr' ? await POS.scaledImage(file, 1000) : await POS.squareImage(file, 600); }
+    catch (e) { POS.toast(e.message, true); busy(b1, false); return; }
+    const before = getUrl();
+    const mime = mode === 'qr' ? 'image/png' : 'image/jpeg';
+    const preview = 'data:' + mime + ';base64,' + data;
+    setUrl(preview, true);
+    const job = POS.call('uploadImage', { data, mime, name: mode })
+      .then(r => swap(r.url), e => { POS.toast('อัปโหลดรูปไม่สำเร็จ: ' + e.message, true); swap(before); })
+      .finally(() => uploads.delete(job));
+    // เปลี่ยนรูปตัวอย่างเป็นรูปจริงแบบไม่วาดฟอร์มใหม่ (พิมพ์ค้างอยู่ก็ไม่หลุด)
+    function swap(url) {
+      if (getUrl() !== preview) return;
+      setUrl(url, false);
+      const img = [...root.querySelectorAll('.pv img')].find(i => i.getAttribute('src') === preview);
+      if (!img) return;
+      const pv = img.parentNode;
+      const up = pv.querySelector('.up'); if (up) up.remove();
+      if (url) { img.src = url; } else { img.remove(); }
+    }
+    uploads.add(job);
+  };
+  if (b2) b2.onclick = () => { if (confirm('ลบรูปนี้?')) setUrl('', true); };
 }
+async function waitUploads(btn) {
+  if (!uploads.size) return;
+  btn.innerHTML = '<span class="spin"></span> รออัปโหลดรูปให้เสร็จ';
+  await Promise.all([...uploads]);
+}
+const isTemp = u => String(u || '').startsWith('data:');
 
 /* ---------- products ---------- */
 function renderProducts() {
@@ -161,7 +198,7 @@ function editProduct(id) {
         ${vs.map(v => `<div class="vrow" onclick="editVariant('${id}','${v.variant_id}')"><span>${esc(vLabel(v))} <small style="color:#888">${esc(v.sku)}</small>${v.active ? '' : '<span class="tag">ปิด</span>'}</span><span>${money(v.price == null ? p.price : v.price)}฿ · สต็อก ${v.stock_qty}</span></div>`).join('') || '<div class="hint">ไม่มี — ถ้าสินค้ามีไซซ์หรือสีให้เลือก (เช่น ถุงเท้า) ให้กดเพิ่ม แต่ละตัวเลือกจะมี SKU และสต็อกแยกกัน</div>'}
       </div>` : '<div class="hint" style="margin-top:12px">บันทึกสินค้าก่อน แล้วจึงเพิ่มไซซ์/สีได้</div>'}
       <br><button class="btn" id="fSave">บันทึก</button><br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
-    bindImg(el, () => p.image_url, u => { keep(); p.image_url = u; render(); }, 'sq');
+    bindImg(el, () => p.image_url, (u, re) => { if (re === false) { p.image_url = u; return; } keep(); p.image_url = u; render(); }, 'sq');
     $('fSave').onclick = save;
   };
   const keep = () => {
@@ -172,12 +209,14 @@ function editProduct(id) {
     keep();
     if (!p.name.trim()) return POS.toast('กรุณาใส่ชื่อสินค้า', true);
     const b = $('fSave'); busy(b, true);
+    await waitUploads(b);
+    if (isTemp(p.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
     try {
       const r = await POS.call('saveProduct', { product_id: id || '', name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
       POS.toast('บันทึกแล้ว');
-      await load();
-      if (!id) { editProduct(r.product_id); return; }
-      closeM('mEdit');
+      if (!id) { await load(); editProduct(r.product_id); return; }
+      Object.assign(P(id), { name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
+      renderProducts(); closeM('mEdit'); load();
     } catch (e) { POS.toast(e.message, true); busy(b, false); }
   };
   render();
@@ -243,7 +282,7 @@ function editPackage(id) {
         <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
       </div>
       <br><button class="btn" id="kSave">บันทึก</button><br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
-    bindImg(el, () => k.image_url, u => { keep(); k.image_url = u; render(); }, 'sq');
+    bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
     $('addSlot').onclick = () => { keep(); const used = k.slots.map(s => s.slot); let c = 65; while (used.includes(String.fromCharCode(c))) c++; k.slots.push({ slot: String.fromCharCode(c), qty: 1, items: [] }); render(); };
     el.querySelectorAll('[data-del]').forEach(a => a.onclick = () => { keep(); k.slots.splice(+a.dataset.del, 1); render(); });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
@@ -251,6 +290,8 @@ function editPackage(id) {
     $('kSave').onclick = async () => {
       keep();
       const b = $('kSave'); busy(b, true);
+      await waitUploads(b);
+      if (isTemp(k.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
       try {
         await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, slots: k.slots });
         POS.toast('บันทึกแล้ว'); closeM('mEdit'); load();
@@ -298,9 +339,11 @@ function renderSettings() {
       <label>หน่วย (คั่นด้วย ,)</label><input id="s_units" value="${esc(s.units)}">
       <div class="sec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
       <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>`;
-    bindImg(el, () => s.promptpay_qr_image_url, u => { keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
+    bindImg(el, () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
     $('sSave').onclick = async () => {
       keep(); const b = $('sSave'); busy(b, true);
+      await waitUploads(b);
+      if (isTemp(s.promptpay_qr_image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
       try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.toast('บันทึกแล้ว'); busy(b, false); }
       catch (e) { POS.toast(e.message, true); busy(b, false); }
     };

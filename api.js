@@ -19,7 +19,7 @@
     user() { try { return JSON.parse(LS.get('pos_user') || 'null'); } catch (e) { return null; } },
     isAdmin() { const u = this.user(); return !!u && u.role === 'admin'; },
     saveSession(token, user) { LS.set('pos_token', token); LS.set('pos_user', JSON.stringify(user)); },
-    clearSession() { LS.del('pos_token'); LS.del('pos_user'); },
+    clearSession() { LS.del('pos_token'); LS.del('pos_user'); LS.del('pos_admin_cache'); },
     pref(k, v) { if (v === undefined) return LS.get('pos_pref_' + k); LS.set('pos_pref_' + k, v); },
 
     async call(action, payload) {
@@ -189,4 +189,7 @@
   };
 
   window.POS = POS;
+
+  // ปลุกเซิร์ฟเวอร์ตั้งแต่เปิดหน้า (Apps Script ที่ไม่ได้ใช้สักพักจะตื่นช้า)
+  try { const u = POS.apiUrl(); if (u) fetch(u, { mode: 'no-cors' }).catch(() => {}); } catch (e) {}
 })();

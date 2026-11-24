@@ -123,7 +123,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v1', '1', 600);
+  cache.put('setup_ok_v1', '1', 21600);
 }
 
 function headers_(name) {
@@ -257,7 +257,13 @@ function auth_(token) {
     userId = s.user_id;
     cache.put('tok_' + token, userId, 3600);
   }
-  const u = readTable_('Users').filter(function (x) { return x.user_id === userId; })[0];
+  let u = null;
+  const cached = cache.get('usr_' + userId);
+  if (cached) u = JSON.parse(cached);
+  else {
+    u = readTable_('Users').filter(function (x) { return x.user_id === userId; })[0];
+    if (u) cache.put('usr_' + userId, JSON.stringify(u), 600);
+  }
   if (!u || u.status !== 'active') throw new Error('unauthorized');
   return u;
 }
@@ -325,7 +331,21 @@ function catalog_(admin) {
   return { products: products, variants: variants, packages: packages, settings: settingsMap_() };
 }
 
-function getCatalog_() { return catalog_(false); }
+function cachedCatalog_(admin) {
+  const cache = CacheService.getScriptCache();
+  const key = admin ? 'cat_admin' : 'cat_user';
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const data = catalog_(admin);
+  try { cache.put(key, JSON.stringify(data), 21600); } catch (e) { /* ใหญ่เกิน 100KB ก็อ่านจากชีตทุกครั้ง */ }
+  return data;
+}
+
+function catalogChanged_() {
+  CacheService.getScriptCache().removeAll(['cat_admin', 'cat_user']);
+}
+
+function getCatalog_() { return cachedCatalog_(false); }
 
 /* ---------------- Stock ---------------- */
 
@@ -352,8 +372,25 @@ function changeStock_(idx, itemId, delta) {
   if (!it) throw new Error('ไม่พบสินค้า ' + itemId);
   if (it.has_variants) throw new Error('สินค้า ' + it.name + ' ต้องเลือกไซซ์/สี');
   it.stock += delta;
-  updateRow_(it.sheet, it.row, { stock_qty: it.stock });
+  it.dirty = true;
   return it.stock;
+}
+
+/** เขียนสต็อกที่เปลี่ยนลงชีตครั้งเดียวต่อชีต (เร็วกว่าเขียนทีละช่อง) */
+function flushStock_(idx) {
+  ['Products', 'Variants'].forEach(function (name) {
+    const dirty = Object.keys(idx).map(function (k) { return idx[k]; }).filter(function (it) { return it.dirty && it.sheet === name; });
+    if (!dirty.length) return;
+    const s = sh_(name);
+    const col = headers_(name).indexOf('stock_qty') + 1;
+    const n = s.getLastRow() - 1;
+    if (col < 1 || n < 1) return;
+    const range = s.getRange(2, col, n, 1);
+    const vals = range.getValues();
+    dirty.forEach(function (it) { vals[it.row - 2][0] = it.stock; it.dirty = false; });
+    range.setValues(vals);
+  });
+  catalogChanged_();
 }
 
 function addStock_(p, user) {
@@ -363,6 +400,7 @@ function addStock_(p, user) {
   return withLock_(function () {
     const idx = stockIndex_();
     const stock = changeStock_(idx, itemId, qty);
+    flushStock_(idx);
     appendRow_('StockIn', {
       stockin_id: nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4), datetime: now_(),
       event_name: str_(p.event_name), item_id: itemId, qty: qty, note: str_(p.note), staff: user.display_name
@@ -387,8 +425,6 @@ function createSale_(p, user) {
       if (dup) return { bill: billOf_(dup.bill_id) };
     }
     const idx = stockIndex_();
-    const products = {};
-    readTable_('Products').forEach(function (r) { products[str_(r.product_id)] = r; });
     const packages = {};
     loadPackages_().forEach(function (k) { packages[k.package_id] = k; });
 
@@ -418,7 +454,7 @@ function createSale_(p, user) {
         const id = str_(ln.id);
         const it = idx[id];
         if (!it) throw new Error('ไม่พบสินค้า ' + id);
-        const price = it.sheet === 'Variants' ? it.price : num_(products[id].price);
+        const price = it.sheet === 'Variants' ? it.price : num_(it.product.price);
         items.push({ item_id: id, item_name: it.name, qty: qty, unit_price: price, line_total: price * qty, package_id: '', package_set_no: '', slot: '' });
         subtotal += price * qty;
         deductions.push([id, qty]);
@@ -433,6 +469,7 @@ function createSale_(p, user) {
     const total = Math.round((subtotal - dAmount) * 100) / 100;
 
     deductions.forEach(function (d) { changeStock_(idx, d[0], -d[1]); });
+    flushStock_(idx);
 
     const billId = nextId_(sales, 'bill_id', 'B', 4);
     const bill = {
@@ -482,7 +519,7 @@ function todaySales_(p) {
 /* ---------------- Admin ---------------- */
 
 function getAdminData_() {
-  const data = catalog_(true);
+  const data = JSON.parse(JSON.stringify(cachedCatalog_(true)));
   data.users = readTable_('Users').map(publicUser_);
   return data;
 }
@@ -508,6 +545,7 @@ function updateUser_(p, admin) {
       patch.pin_hash = hash_(str_(p.pin), patch.salt);
     }
     updateRow_('Users', u._row, patch);
+    CacheService.getScriptCache().remove('usr_' + u.user_id);
     if (patch.status && patch.status !== 'active') revokeSessions_(u.user_id);
     return { user: publicUser_(Object.assign({}, u, patch)) };
   });
@@ -538,12 +576,14 @@ function saveProduct_(p) {
       const r = rows.filter(function (x) { return str_(x.product_id) === id; })[0];
       if (!r) throw new Error('ไม่พบสินค้า');
       updateRow_('Products', r._row, obj);
-      return { product_id: id };
+      catalogChanged_();
+    return { product_id: id };
     }
     obj.product_id = nextId_(rows, 'product_id', 'P', 3);
     obj.has_variants = false;
     obj.stock_qty = 0;
     appendRow_('Products', obj);
+    catalogChanged_();
     return { product_id: obj.product_id };
   });
 }
@@ -575,6 +615,7 @@ function saveVariant_(p) {
       appendRow_('Variants', obj);
     }
     if (!bool_(prod.has_variants)) updateRow_('Products', prod._row, { has_variants: true });
+    catalogChanged_();
     return { variant_id: vid };
   });
 }
@@ -603,6 +644,7 @@ function savePackage_(p) {
     const s = sh_('PackageSlots');
     readTable_('PackageSlots').filter(function (r) { return str_(r.package_id) === id; }).reverse().forEach(function (r) { s.deleteRow(r._row); });
     appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(',') }; }));
+    catalogChanged_();
     return { package_id: id };
   });
 }
@@ -617,6 +659,7 @@ function saveSettings_(p) {
       if (r) updateRow_('Settings', r._row, { value: str_(p[k]) });
       else appendRow_('Settings', { key: k, value: str_(p[k]) });
     });
+    catalogChanged_();
     return { settings: settingsMap_() };
   });
 }

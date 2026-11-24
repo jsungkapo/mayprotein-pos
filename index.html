@@ -170,7 +170,8 @@ function imgHtml(url, fallback) { return url ? `<img src="${esc(url)}" loading="
 function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'; }
 
 /* ---------- boot ---------- */
-POS.requireLogin(u => { me = u; boot(); });
+// เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; boot(); }));
 
 function boot() {
   $('whoName').textContent = me.display_name;
@@ -187,16 +188,28 @@ function boot() {
   loadCatalog();
 }
 
+const CAT_CACHE = 'pos_catalog_cache';
+function applyCatalog() {
+  $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
+  if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
+  showEvent();
+  cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
+  renderChips(); renderCart(); renderStock();
+}
+function saveCatalogCache() { try { localStorage.setItem(CAT_CACHE, JSON.stringify(cat)); } catch (e) {} }
 async function loadCatalog() {
+  // แสดงสินค้าที่จำไว้ในเครื่องทันที แล้วค่อยอัปเดตจากเซิร์ฟเวอร์
+  if (!cat.products.length) {
+    try { const c = JSON.parse(localStorage.getItem(CAT_CACHE) || 'null'); if (c && c.products) { cat = c; applyCatalog(); } } catch (e) {}
+  }
   try {
     const r = await POS.call('getCatalog');
+    delete r.ok;
     cat = r;
-    $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
-    if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
-    showEvent();
-    cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
-    renderChips(); renderCart(); renderStock();
-  } catch (e) { POS.toast(e.message, true); $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
+    saveCatalogCache();
+    applyCatalog();
+    return;
+  } catch (e) { POS.toast(e.message, true); if (!cat.products.length) $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
 }
 
 function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = ev ? '📍 ' + ev : ''; $('evInput').value = ev; }
@@ -315,6 +328,8 @@ async function pay() {
     $('disc').value = 0; $('note').value = ''; clientId = null;
     $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
     $('mOk').classList.add('on');
+    b.items.forEach(i => { if (i.package_id && !i.slot) return; const p = P(i.item_id), v = V(i.item_id); if (p) p.stock_qty -= i.qty; if (v) v.stock_qty -= i.qty; });
+    saveCatalogCache(); renderGrid(); renderStock();
     loadCatalog();
   } catch (e) { POS.toast(e.message, true); }
   paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย';
@@ -353,7 +368,7 @@ async function addStock() {
   const btn = $('stkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
   try {
     const r = await POS.call('addStock', { item_id: id, qty: q, note: $('stkNote').value.trim(), event_name: POS.pref('event') || '' });
-    const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty;
+    const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty; saveCatalogCache();
     $('stkNote').value = ''; renderStock(); renderGrid();
     POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}`);
   } catch (e) { POS.toast(e.message, true); }
