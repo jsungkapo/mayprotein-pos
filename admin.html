@@ -179,13 +179,24 @@ function renderProducts() {
   }).join('') || '<div class="empty">ยังไม่มีสินค้า</div>';
 }
 
-function editProduct(id) {
-  const p = id ? { ...P(id) } : { name: '', sku: '', category: '', subcategory: '', unit: '', price: '', cost: '', description: '', image_url: '', active: true };
+function uniqueSku(base) {
+  if (!base) return '';
+  const used = new Set([...D.products.map(p => p.sku), ...D.variants.map(v => v.sku)].filter(Boolean));
+  let sku = base + '-COPY', n = 2;
+  while (used.has(sku)) sku = base + '-COPY' + n++;
+  return sku;
+}
+
+/** copy = { from: product_id, data: ค่าที่คัดลอกมา } — ใช้ตอนกด "คัดลอกเป็นสินค้าใหม่" */
+function editProduct(id, copy) {
+  const p = id ? { ...P(id) } : copy ? { ...copy.data } : { name: '', sku: '', category: '', subcategory: '', unit: '', price: '', cost: '', description: '', image_url: '', active: true };
+  const copyVars = copy ? varsOf(copy.from) : [];
   const s = D.settings;
   const el = $('editSheet');
   const render = () => {
     const vs = id ? varsOf(id) : [];
-    el.innerHTML = `<h3>${id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}</h3>
+    el.innerHTML = `<h3>${id ? 'แก้ไขสินค้า' : copy ? 'คัดลอกสินค้า' : 'เพิ่มสินค้าใหม่'}</h3>
+      ${copy ? `<div class="hint" style="margin-bottom:8px">คัดลอกจาก "${esc(itemName(copy.from))}" แก้ชื่อและรายละเอียดแล้วกดบันทึก${copyVars.length ? ` · ไซซ์/สี ${copyVars.length} ตัวเลือกจะถูกคัดลอกไปด้วย` : ''} · สต็อกเริ่มที่ 0</div>` : ''}
       ${imgBlock(p.image_url, '📦')}
       <label>ชื่อสินค้า *</label><input id="fName" value="${esc(p.name)}">
       <div class="row"><div><label>SKU</label><input id="fSku" value="${esc(p.sku)}" autocapitalize="characters"></div><div><label>หน่วย</label><select id="fUnit">${opts(list(s.units), p.unit)}</select></div></div>
@@ -196,10 +207,17 @@ function editProduct(id) {
       ${id && !p.has_variants ? `<div class="hint">สต็อกปัจจุบัน ${p.stock_qty} — เพิ่ม/ลดสต็อกได้ที่หน้าขาย แท็บ "สต็อก"</div>` : ''}
       ${id ? `<div class="sec"><h4><span>ไซซ์ / สี (variation)</span><button class="btn sm line" onclick="editVariant('${id}')">+ เพิ่ม</button></h4>
         ${vs.map(v => `<div class="vrow" onclick="editVariant('${id}','${v.variant_id}')"><span>${esc(vLabel(v))} <small style="color:#888">${esc(v.sku)}</small>${v.active ? '' : '<span class="tag">ปิด</span>'}</span><span>${money(v.price == null ? p.price : v.price)}฿ · สต็อก ${v.stock_qty}</span></div>`).join('') || '<div class="hint">ไม่มี — ถ้าสินค้ามีไซซ์หรือสีให้เลือก (เช่น ถุงเท้า) ให้กดเพิ่ม แต่ละตัวเลือกจะมี SKU และสต็อกแยกกัน</div>'}
-      </div>` : '<div class="hint" style="margin-top:12px">บันทึกสินค้าก่อน แล้วจึงเพิ่มไซซ์/สีได้</div>'}
-      <br><button class="btn" id="fSave">บันทึก</button><br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
+      </div>` : copyVars.length ? '' : '<div class="hint" style="margin-top:12px">บันทึกสินค้าก่อน แล้วจึงเพิ่มไซซ์/สีได้</div>'}
+      <br><button class="btn" id="fSave">บันทึก</button>
+      ${id ? '<br><br><button class="btn line" id="fCopy">📄 คัดลอกเป็นสินค้าใหม่</button>' : ''}
+      <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => p.image_url, (u, re) => { if (re === false) { p.image_url = u; return; } keep(); p.image_url = u; render(); }, 'sq');
     $('fSave').onclick = save;
+    if (id) $('fCopy').onclick = () => {
+      if (uploads.size) return POS.toast('รอให้อัปโหลดรูปเสร็จก่อน', true);
+      keep();
+      editProduct(null, { from: id, data: { ...p, name: p.name.trim() + ' (copy)', sku: uniqueSku(p.sku.trim()), active: true } });
+    };
   };
   const keep = () => {
     p.name = $('fName').value; p.sku = $('fSku').value; p.unit = $('fUnit').value; p.category = $('fCat').value; p.subcategory = $('fSub').value;
@@ -214,13 +232,20 @@ function editProduct(id) {
     try {
       const r = await POS.call('saveProduct', { product_id: id || '', name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
       POS.toast('บันทึกแล้ว');
-      if (!id) { await load(); editProduct(r.product_id); return; }
+      if (!id) {
+        for (const v of copyVars) {
+          b.innerHTML = '<span class="spin"></span> คัดลอกไซซ์/สี';
+          await POS.call('saveVariant', { product_id: r.product_id, variant_id: '', size: v.size, color: v.color, sku: uniqueSku(v.sku), price: v.price == null ? '' : v.price, cost: v.cost == null ? '' : v.cost, image_url: v.image_url, active: v.active });
+        }
+        await load(); editProduct(r.product_id); return;
+      }
       Object.assign(P(id), { name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
       renderProducts(); closeM('mEdit'); load();
     } catch (e) { POS.toast(e.message, true); busy(b, false); }
   };
   render();
   $('mEdit').classList.add('on');
+  el.scrollTop = 0;
 }
 
 function editVariant(pid, vid) {
