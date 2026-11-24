@@ -282,8 +282,9 @@ function renderPackages() {
   $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}">` : '🎁'}</div>
     <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${k.slots.map(s => esc(s.slot) + ': ' + s.items.length + ' ตัวเลือก').join(' · ')}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
 }
-function editPackage(id) {
-  const src = id ? D.packages.find(k => k.package_id === id) : null;
+/** copy = { from: package_id, data: ค่าที่คัดลอกมา } */
+function editPackage(id, copy) {
+  const src = id ? D.packages.find(k => k.package_id === id) : copy ? copy.data : null;
   const k = src ? JSON.parse(JSON.stringify(src)) : { name: '', price: '', description: '', image_url: '', active: true, slots: [{ slot: 'A', qty: 1, items: [] }, { slot: 'B', qty: 1, items: [] }] };
   const all = sellables();
   const el = $('editSheet');
@@ -293,7 +294,8 @@ function editPackage(id) {
     k.slots.forEach((s, i) => { s.slot = el.querySelector(`#sl${i}`).value.trim(); s.qty = +el.querySelector(`#sq${i}`).value || 1; });
   };
   const render = () => {
-    el.innerHTML = `<h3>${id ? 'แก้ไขแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
+    el.innerHTML = `<h3>${id ? 'แก้ไขแพ็กเกจ' : copy ? 'คัดลอกแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
+      ${copy ? `<div class="hint" style="margin-bottom:8px">คัดลอกจาก "${esc((D.packages.find(x => x.package_id === copy.from) || {}).name || '')}" พร้อมช่องสินค้าทั้งหมด แก้แล้วกดบันทึก</div>` : ''}
       ${imgBlock(k.image_url, '🎁')}
       <label>ชื่อแพ็กเกจ *</label><input id="kName" value="${esc(k.name)}">
       <label>ราคาเซต (บาท)</label><input id="kPrice" type="number" inputmode="decimal" value="${k.price}">
@@ -306,12 +308,21 @@ function editPackage(id) {
         <div class="picks">${all.filter(x => !filters[i] || x.name.toLowerCase().includes(filters[i].toLowerCase()) || s.items.includes(x.id)).map(x => `<label><input type="checkbox" data-slot="${i}" value="${esc(x.id)}" ${s.items.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
         <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
       </div>
-      <br><button class="btn" id="kSave">บันทึก</button><br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
+      <br><button class="btn" id="kSave">บันทึก</button>
+      ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button>' : ''}
+      <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
     $('addSlot').onclick = () => { keep(); const used = k.slots.map(s => s.slot); let c = 65; while (used.includes(String.fromCharCode(c))) c++; k.slots.push({ slot: String.fromCharCode(c), qty: 1, items: [] }); render(); };
     el.querySelectorAll('[data-del]').forEach(a => a.onclick = () => { keep(); k.slots.splice(+a.dataset.del, 1); render(); });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
     el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
+    if (id) $('kCopy').onclick = () => {
+      if (uploads.size) return POS.toast('รอให้อัปโหลดรูปเสร็จก่อน', true);
+      keep();
+      const data = JSON.parse(JSON.stringify(k));
+      delete data.package_id; data.name = k.name.trim() + ' (copy)'; data.active = true;
+      editPackage(null, { from: id, data });
+    };
     $('kSave').onclick = async () => {
       keep();
       const b = $('kSave'); busy(b, true);
@@ -325,6 +336,7 @@ function editPackage(id) {
   };
   render();
   $('mEdit').classList.add('on');
+  el.scrollTop = 0;
 }
 
 /* ---------- users ---------- */
