@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#e8336d">
+<meta name="theme-color" content="#d4ebfa">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
@@ -12,6 +12,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
 <link rel="stylesheet" href="styles.css">
 <style>
+/* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
+:root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
+header.top{background:#d4ebfa;color:#0d4a7e}
+header.top .who button{background:#fff;color:#0d4a7e;border:1px solid #b5d8f2}
+header.top a.back{color:#1f6fae}
+#loginScreen .login-logo .mark{background:#2a8bd0}
 .wrap{max-width:860px;margin:0 auto}
 .tabs{position:sticky;top:0;z-index:5}
 .toolbar{display:flex;gap:8px;margin-bottom:10px}
@@ -89,7 +95,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 .act.add{background:#e1f5ea;color:var(--ok)}.act.del{background:#fde4e4;color:var(--bad)}.act.edit{background:#e7efff;color:#2f5bd3}.act.sale{background:var(--pink-soft);color:var(--pink)}.act.stock{background:#fff3d6;color:var(--warn)}
 </style></head><body>
 <header class="top">
-  <div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" style="color:#fff">← กลับหน้าขาย</a></div></div>
+  <div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
@@ -325,7 +331,7 @@ function editProduct(id, copy) {
       <div class="row"><div><label>ราคาขาย (บาท)</label><input id="fPrice" type="number" inputmode="decimal" value="${p.price}"></div><div><label>ต้นทุน (บาท)</label><input id="fCost" type="number" inputmode="decimal" value="${p.cost}"></div></div>
       <label>คำอธิบาย</label><textarea id="fDesc" rows="2">${esc(p.description)}</textarea>
       <label class="chk"><input type="checkbox" id="fAct" ${p.active ? 'checked' : ''}> เปิดขาย (แสดงในหน้าขาย)</label>
-      ${id && !p.has_variants ? `<div class="hint">สต็อกปัจจุบัน ${p.stock_qty} — เพิ่ม/ลดสต็อกได้ที่หน้าขาย แท็บ "สต็อก"</div>` : ''}
+      ${id && !p.has_variants ? `<div class="hint">สต็อกปัจจุบัน ${p.stock_qty} — เพิ่ม/ลดสต็อกได้ที่แท็บ "สต็อก" (ใบเบิก) หรือ "นับสต็อก"</div>` : ''}
       ${id ? `<div class="sec"><h4><span>ไซซ์ / สี (variation)</span><button class="btn sm line" onclick="editVariant('${id}')">+ เพิ่ม</button></h4>
         ${vs.map(v => `<div class="vrow" onclick="editVariant('${id}','${v.variant_id}')"><span>${esc(vLabel(v))} <small style="color:#888">${esc(v.sku)}</small>${v.active ? '' : '<span class="tag">ปิด</span>'}</span><span>${money(v.price == null ? p.price : v.price)}฿ · สต็อก ${v.stock_qty}</span></div>`).join('') || '<div class="hint">ไม่มี — ถ้าสินค้ามีไซซ์หรือสีให้เลือก (เช่น ถุงเท้า) ให้กดเพิ่ม แต่ละตัวเลือกจะมี SKU และสต็อกแยกกัน</div>'}
       </div>` : copyVars.length ? '' : '<div class="hint" style="margin-top:12px">บันทึกสินค้าก่อน แล้วจึงเพิ่มไซซ์/สีได้</div>'}
