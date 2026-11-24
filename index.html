@@ -91,7 +91,7 @@ main{flex:1;overflow-y:auto;min-height:0}
 tr.low td{color:var(--bad)}
 </style></head><body>
 <header class="top">
-  <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9" id="evName"></div></div>
+  <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
 </header>
 <div class="menu" id="menu"></div>
@@ -110,21 +110,6 @@ tr.low td{color:var(--bad)}
       <button class="btn sm line" onclick="loadToday(true)">↻</button>
     </div>
     <div id="billList"></div>
-  </div>
-
-  <div class="page" id="p-stock">
-    <div class="box">
-      <label>ชื่องาน / สถานที่ (ใช้บันทึกกับทุกบิล)</label>
-      <div class="row"><input id="evInput" placeholder="เช่น Bangkok Fit Expo"><button class="btn sm g" style="flex:none" onclick="saveEvent()">บันทึก</button></div>
-    </div>
-    <div class="box">
-      <b>เพิ่มสต็อก</b>
-      <label>สินค้า</label><select id="stkItem"></select>
-      <label>จำนวนที่เพิ่ม (ใส่ติดลบเพื่อลด)</label><input type="number" inputmode="numeric" id="stkQty" value="10">
-      <label>หมายเหตุ</label><input id="stkNote" placeholder="เช่น เติมของรอบบ่าย">
-      <br><br><button class="btn" id="stkBtn" onclick="addStock()">+ เพิ่มสต็อก</button>
-    </div>
-    <div class="box"><div style="display:flex;justify-content:space-between;align-items:center"><b>สต็อกคงเหลือ</b><a onclick="loadCatalog()">↻ รีเฟรช</a></div><table id="stkTable"></table></div>
   </div>
 
   <div class="page" id="p-sum">
@@ -198,9 +183,10 @@ window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u
 
 function boot() {
   $('whoName').textContent = me.display_name;
-  const tabs = [['sell', '🛒 ขาย'], ...(POS.isAdmin() ? [['bills', '🧾 รายการขาย']] : []), ['stock', '📦 สต็อก'], ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
+  const tabs = [['sell', '🛒 ขาย'], ...(POS.isAdmin() ? [['bills', '🧾 รายการขาย']] : []), ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
   $('tabs').innerHTML = tabs.map(([k, l], i) => `<button data-t="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('');
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
+  if (tabs.length === 1) $('tabs').style.display = 'none';
   $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
     (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a>' : '') + '<a onclick="POS.logout()">ออกจากระบบ</a>';
   $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
@@ -217,7 +203,7 @@ function applyCatalog() {
   if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
   showEvent();
   cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
-  renderChips(); renderCart(); renderStock();
+  renderChips(); renderCart();
 }
 function saveCatalogCache() { try { localStorage.setItem(CAT_CACHE, JSON.stringify(cat)); } catch (e) {} }
 async function loadCatalog() {
@@ -235,15 +221,18 @@ async function loadCatalog() {
   } catch (e) { POS.toast(e.message, true); if (!cat.products.length) $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
 }
 
-function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = ev ? '📍 ' + ev : ''; $('evInput').value = ev; }
-function saveEvent() { POS.pref('event', $('evInput').value.trim()); showEvent(); POS.toast('บันทึกชื่องานแล้ว'); }
+function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = '📍 ' + (ev || 'แตะเพื่อใส่ชื่องาน'); }
+function editEvent() {
+  const v = prompt('ชื่องาน / สถานที่ (บันทึกกับทุกบิลจากเครื่องนี้)', POS.pref('event') || '');
+  if (v === null) return;
+  POS.pref('event', v.trim()); showEvent(); POS.toast('บันทึกชื่องานแล้ว');
+}
 
 function tab(k, b) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + k));
   $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   $('cartPanel').style.display = k === 'sell' ? 'flex' : 'none';
   if (k === 'bills' || k === 'sum') loadToday();
-  if (k === 'stock') renderStock();
 }
 
 /* ---------- sell ---------- */
@@ -401,7 +390,7 @@ async function pay() {
     $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
     $('mOk').classList.add('on');
     b.items.forEach(i => { if (i.package_id && !i.slot) return; const p = P(i.item_id), v = V(i.item_id); if (p) p.stock_qty -= i.qty; if (v) v.stock_qty -= i.qty; });
-    saveCatalogCache(); renderGrid(); renderStock();
+    saveCatalogCache(); renderGrid();
     loadCatalog();
   } catch (e) { POS.toast(e.message, true); }
   paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย';
@@ -417,34 +406,6 @@ function receiptHtml(b) {
   <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
   <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
   ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}</div>`;
-}
-
-/* ---------- stock ---------- */
-function stockItems() {
-  const a = [];
-  cat.products.forEach(p => {
-    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: vName(v), stock: v.stock_qty, cat: p.category }));
-    else a.push({ id: p.product_id, name: p.name, stock: p.stock_qty, cat: p.category });
-  });
-  return a;
-}
-function renderStock() {
-  const a = stockItems(), sel = $('stkItem').value;
-  $('stkItem').innerHTML = a.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (เหลือ ${x.stock})</option>`).join('');
-  if (sel) $('stkItem').value = sel;
-  $('stkTable').innerHTML = a.map(x => `<tr class="${x.stock <= 0 ? 'low' : ''}"><td>${esc(x.name)}</td><td class="n">${x.stock}</td></tr>`).join('') || '<tr><td class="empty">ยังไม่มีสินค้า</td></tr>';
-}
-async function addStock() {
-  const id = $('stkItem').value, q = Math.round(+$('stkQty').value || 0);
-  if (!id || !q) return POS.toast('เลือกสินค้าและใส่จำนวน', true);
-  const btn = $('stkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
-  try {
-    const r = await POS.call('addStock', { item_id: id, qty: q, note: $('stkNote').value.trim(), event_name: POS.pref('event') || '' });
-    const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty; saveCatalogCache();
-    $('stkNote').value = ''; renderStock(); renderGrid();
-    POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}`);
-  } catch (e) { POS.toast(e.message, true); }
-  btn.disabled = false; btn.textContent = '+ เพิ่มสต็อก';
 }
 
 /* ---------- today (admin) ---------- */

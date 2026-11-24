@@ -60,12 +60,12 @@ function json_(o) {
 }
 
 const PUBLIC_ACTIONS = { register: register_, login: login_ };
-const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, addStock: addStock_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_ };
 const ADMIN_ACTIONS = {
   todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
-  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_
+  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_, addStock: addStock_
 };
 
 function route_(req) {

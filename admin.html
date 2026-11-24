@@ -80,7 +80,7 @@
   <div class="who"><span id="whoName"></span><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
-  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set">ตั้งค่า</button>
+  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="stock">สต็อก</button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set">ตั้งค่า</button>
 </div>
 <div class="wrap">
   <div class="page on" id="p-prod">
@@ -92,6 +92,22 @@
     <div class="list" id="pkgList"></div>
   </div>
   <div class="page" id="p-users"><div id="userList"></div></div>
+  <div class="page" id="p-stock">
+    <div class="box">
+      <b>เพิ่ม / ลดสต็อก</b>
+      <label>ชื่องาน / สถานที่</label><input id="stEv" placeholder="เช่น Bangkok Fit Expo">
+      <label>สินค้า</label><select id="stItem"></select>
+      <label>จำนวน (ใส่ติดลบเพื่อลด)</label><input type="number" inputmode="numeric" id="stQty" value="10">
+      <label>หมายเหตุ</label><input id="stNote" placeholder="เช่น เติมของก่อนออกงาน">
+      <br><br><button class="btn" id="stBtn">+ บันทึกสต็อก</button>
+    </div>
+    <div class="box">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>สต็อกคงเหลือ</b><a onclick="load().then(renderStockTab)">↻ รีเฟรช</a></div>
+      <input id="stQ" placeholder="🔍 ค้นหา" style="margin:8px 0">
+      <table id="stTable"></table>
+      <div class="hint">แตะที่รายการเพื่อเลือกไปเพิ่มสต็อก</div>
+    </div>
+  </div>
   <div class="page" id="p-count">
     <div class="cnt-top">
       <div class="box" style="margin-bottom:6px">
@@ -140,6 +156,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
   if (b.dataset.t === 'users') load();
+  if (b.dataset.t === 'stock') { renderStockTab(); load().then(renderStockTab); }
   if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); }
   if (b.dataset.t === 'log') loadLogs();
 });
@@ -512,6 +529,36 @@ $('cSave').onclick = async () => {
     POS.toast(`บันทึกแล้ว · ตรง ${r.matched} · ปรับ ${r.adjusted.length} รายการ`);
     busy(b, false); await load(); renderCount();
   } catch (e) { POS.toast(e.message, true); busy(b, false); }
+};
+
+/* ---------- stock in ---------- */
+function renderStockTab() {
+  const a = countItems(), sel = $('stItem').value, q = $('stQ').value.trim().toLowerCase();
+  if (!$('stEv').value) $('stEv').value = POS.pref('event') || D.settings.current_event || '';
+  $('stItem').innerHTML = a.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (เหลือ ${x.stock})</option>`).join('');
+  if (sel && a.some(x => x.id === sel)) $('stItem').value = sel;
+  let html = '', last = null;
+  a.filter(x => !q || (x.name + ' ' + (x.sku || '')).toLowerCase().includes(q)).forEach(x => {
+    if (x.cat !== last) { html += `<tr><td colspan="2" class="grp" style="padding-top:10px">${esc(x.cat)}</td></tr>`; last = x.cat; }
+    html += `<tr data-id="${esc(x.id)}" style="cursor:pointer${x.stock <= 0 ? ';color:var(--bad)' : ''}"><td>${esc(x.name)}</td><td class="n"><b>${x.stock}</b></td></tr>`;
+  });
+  $('stTable').innerHTML = html || '<tr><td class="empty">ยังไม่มีสินค้า</td></tr>';
+  $('stTable').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => { $('stItem').value = tr.dataset.id; $('p-stock').scrollIntoView({ behavior: 'smooth' }); $('stQty').focus(); });
+}
+$('stQ').oninput = renderStockTab;
+$('stBtn').onclick = async () => {
+  const id = $('stItem').value, q = Math.round(+$('stQty').value || 0);
+  if (!id || !q) return POS.toast('เลือกสินค้าและใส่จำนวน', true);
+  const ev = $('stEv').value.trim(); POS.pref('event', ev);
+  const b = $('stBtn'); busy(b, true);
+  try {
+    const r = await POS.call('addStock', { item_id: id, qty: q, note: $('stNote').value.trim(), event_name: ev });
+    const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty;
+    try { localStorage.setItem(ADMIN_CACHE, JSON.stringify(D)); } catch (e) {}
+    $('stNote').value = ''; renderStockTab(); renderProducts();
+    POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}`);
+  } catch (e) { POS.toast(e.message, true); }
+  busy(b, false);
 };
 
 /* ---------- activity log ---------- */
