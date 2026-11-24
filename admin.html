@@ -101,14 +101,21 @@ function renderAll() { renderProducts(); renderPackages(); renderUsers(); render
 function pickImage(mode) {
   return new Promise(resolve => {
     const f = $('fileIn'); f.value = '';
+    let picked = false, done = false;
+    const finish = v => { if (done) return; done = true; window.removeEventListener('focus', onFocus); resolve(v); };
+    // กดยกเลิกในหน้าต่างเลือกรูป: เบราว์เซอร์ใหม่ยิง cancel, เบราว์เซอร์เก่าดูจากหน้าเว็บกลับมาโฟกัสแล้วไม่มีไฟล์
+    const onFocus = () => setTimeout(() => { if (!picked && !f.files.length) finish(null); }, 3000);
+    f.oncancel = () => finish(null);
+    window.addEventListener('focus', onFocus);
     f.onchange = async () => {
-      const file = f.files[0]; if (!file) return resolve(null);
+      const file = f.files[0]; if (!file) return finish(null);
+      picked = true;
       try {
         const data = mode === 'qr' ? await POS.scaledImage(file, 1000) : await POS.squareImage(file, 600);
         POS.toast('กำลังอัปโหลดรูป...');
         const r = await POS.call('uploadImage', { data, mime: mode === 'qr' ? 'image/png' : 'image/jpeg', name: mode });
-        resolve(r.url);
-      } catch (e) { POS.toast(e.message, true); resolve(null); }
+        finish(r.url);
+      } catch (e) { POS.toast(e.message, true); finish(null); }
     };
     f.click();
   });
