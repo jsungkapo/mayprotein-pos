@@ -4,30 +4,34 @@
 
 ## ลิงก์
 - เว็บแอป (GitHub Pages): https://jsungkapo.github.io/mayprotein-pos/
-- โค้ด: https://github.com/jsungkapo/mayprotein-pos (branch `main`, ไฟล์หลัก `index.html`)
+- หลังบ้าน: https://jsungkapo.github.io/mayprotein-pos/admin.html
+- โค้ด: https://github.com/jsungkapo/mayprotein-pos (branch `main`)
 - ฐานข้อมูล Google Sheets: "MayProtein POS Database (Template)" — ID `1Qh7fWcxFHWhvQta1zbiBRmFMyRFOfJk-yJuTaDgoMMw`
 - สเปกทั้งหมด: https://claude.ai/artifact/9qhEYdDboouqCXbjhjzMXa
+- วิธีติดตั้งเซิร์ฟเวอร์: `SETUP.md`
 
 ## วิธีทำงาน
 - Claude แก้โค้ดใน repo นี้โดยตรง แล้ว commit + push ขึ้น `main`
 - GitHub Pages deploy จาก `main` / root อัตโนมัติ (รอ 1–2 นาทีหลัง push)
+- Backend (`apps-script/Code.gs`) ต้องให้ผู้ใช้วางใน Apps Script ของ Sheets แล้ว Deploy เอง (ดู SETUP.md) — ทุกครั้งที่แก้ Code.gs ต้องบอกผู้ใช้ให้ Deploy เวอร์ชันใหม่
 - บน iPhone: เปิดลิงก์ใน Safari → แชร์ → เพิ่มไปยังหน้าจอโฮม
 
-## สถานะปัจจุบัน (v3 — ยังเป็น mockup ข้อมูลอยู่ในหน่วยความจำเบราว์เซอร์ ยังไม่ต่อ Sheets)
-- แท็บ: ขาย / รายการขาย / สต็อก / สรุป
-- กดสินค้าซ้ำ = เพิ่มจำนวน, ตะกร้าแยกเป็นส่วนเหนือปุ่มชำระเงิน
-- สินค้ามี variation (ไซซ์/สี), แพ็กเกจแบบช่อง A/B/C เลือกสินค้าได้ นับจำนวนเซต
-- ชำระเงิน: ส่วนลดท้ายบิล (บาท/%), หมายเหตุ, เงินสด/โอน/พร้อมเพย์ QR
-- ช่องเงินใช้ `inputmode="decimal"` (แป้นตัวเลขบน iPhone)
-- หลังยืนยันขาย: หน้า "ขายสำเร็จ" แสดงเลขบิล + ปุ่มบิลถัดไป
+## โครงสร้างไฟล์
+- `index.html` หน้าขาย (แท็บ ขาย / รายการขาย* / สต็อก / สรุป*) *แอดมินเท่านั้น
+- `admin.html` หลังบ้าน (สินค้า+variation+รูป, แพ็กเกจ+ช่อง, พนักงาน, ตั้งค่า+QR) แอดมินเท่านั้น
+- `api.js` ตัวเรียก API + หน้าล็อกอิน/สมัคร + ครอปรูป (ใช้ร่วมกัน)
+- `styles.css` สไตล์ร่วม, `config.js` ใส่ `API_URL` ของ Apps Script
+- `manifest.json`, `sw.js`, `icons/` สำหรับ PWA
+- `apps-script/Code.gs` backend: auth (username + PIN hash, session 30 วัน, ล็อก 5 นาทีหลังผิด 5 ครั้ง), role admin/seller, สมัครใหม่ = pending (คนแรก = admin), ขาย (ราคาคิดฝั่งเซิร์ฟเวอร์, ตัดสต็อก, เลขบิล B####, กันบิลซ้ำด้วย client_id), เพิ่มสต็อก, CRUD หลังบ้าน, อัปโหลดรูปไป Drive
 
-## งานที่ยังเหลือ (ตามลำดับ)
-1. Google Apps Script backend + แท็บ Users, ระบบล็อกอิน (username + PIN), สมัครครั้งแรกรอแอดมินอนุมัติ
-2. Role: admin เห็นทุกอย่าง / seller ไม่เห็นยอดขาย (ซ่อนแท็บรายการขายและสรุป)
-3. ต่อหน้า POS เข้ากับ backend (บันทึกบิล, ตัดสต็อก, เลขบิลจาก backend)
-4. หน้าหลังบ้าน `admin.html`: จัดการสินค้า/รูป/variation/แพ็กเกจ/QR/พนักงาน
-5. PWA manifest + ไอคอน
-6. ดาวน์โหลดสรุปท้ายวันเป็น CSV
+## สถานะ
+- [x] UI หน้าขาย v3 (ตะกร้าแยก, กดซ้ำเพิ่มจำนวน, แพ็กเกจ A/B/C, >5 ตัวเลือกเป็นดรอปดาวน์, ส่วนลดบาท/%, หมายเหตุ, QR เต็มจอ, หน้าขายสำเร็จ+เลขบิล)
+- [x] ระบบล็อกอิน/สมัคร/อนุมัติพนักงาน + สิทธิ์ admin/seller
+- [x] หลังบ้าน admin.html
+- [x] PWA manifest + ไอคอน
+- [x] ดาวน์โหลดสรุปท้ายวัน CSV
+- [ ] ผู้ใช้ติดตั้ง Apps Script + ใส่ URL ใน config.js (รอ URL จากผู้ใช้)
 
 ## ประวัติ
-- 2026-11-24: สร้าง repo, เปิด Pages, เพิ่ม inputmode ช่องส่วนลด, อัปเป็น v3 (หน้าขายสำเร็จ + แท็บรายการขาย)
+- 2026-11-24: สร้าง repo, เปิด Pages, inputmode ช่องส่วนลด, v3 (หน้าขายสำเร็จ + แท็บรายการขาย)
+- 2026-11-24: เพิ่ม backend Apps Script, ล็อกอิน/สิทธิ์, หลังบ้าน, PWA — ทดสอบกับ mock Sheets + เบราว์เซอร์ขนาด iPhone ผ่าน

@@ -1,219 +1,406 @@
 <!DOCTYPE html>
 <html lang="th"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="May POS">
+<meta name="theme-color" content="#e8336d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
 <title>MayProtein POS</title>
+<link rel="stylesheet" href="styles.css">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,"Sukhumvit Set","Prompt",sans-serif}
-html,body{height:100%}
-body{background:#f4f5f7;color:#222;display:flex;flex-direction:column;height:100dvh;overflow:hidden}
-header{background:#e8336d;color:#fff;padding:12px 16px;font-weight:700;font-size:18px;display:flex;justify-content:space-between;flex:none}
-.tabs{display:flex;background:#fff;border-bottom:1px solid #ddd;flex:none}
-.tabs button{flex:1;padding:12px 2px;border:0;background:none;font-size:14px;color:#666}
-.tabs button.on{color:#e8336d;border-bottom:3px solid #e8336d;font-weight:700}
+body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
-.page{display:none;padding:12px}.page.on{display:block}
-.chips{display:flex;gap:8px;overflow-x:auto;margin-bottom:10px}
-.chip{padding:6px 14px;border-radius:20px;background:#fff;border:1px solid #ddd;white-space:nowrap;font-size:14px}
-.chip.on{background:#e8336d;color:#fff;border-color:#e8336d}
+.chips{display:flex;gap:8px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.chip{padding:6px 14px;border-radius:20px;background:#fff;border:1px solid #ddd;white-space:nowrap;font-size:14px;cursor:pointer}
+.chip.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.search{margin-bottom:10px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px}
-.card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px #0001;text-align:center;cursor:pointer;position:relative}
-.badge{position:absolute;top:6px;right:6px;background:#e8336d;color:#fff;border-radius:12px;min-width:24px;height:24px;font-size:13px;font-weight:700;line-height:24px;padding:0 6px}
-.img{aspect-ratio:1;background:#fde3ec;display:flex;align-items:center;justify-content:center;font-size:34px}
-.card .n{font-size:13px;padding:6px 4px 0;height:36px;overflow:hidden}
-.card .p{font-weight:700;color:#e8336d;padding-bottom:4px}
+.card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px #0001;text-align:center;cursor:pointer;position:relative;user-select:none}
+.card:active{transform:scale(.97)}
+.badge{position:absolute;top:6px;right:6px;background:var(--pink);color:#fff;border-radius:12px;min-width:24px;height:24px;font-size:13px;font-weight:700;line-height:24px;padding:0 6px;z-index:1}
+.img{aspect-ratio:1;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden}
+.img img{width:100%;height:100%;object-fit:cover}
+.card .n{font-size:13px;padding:6px 4px 0;height:36px;overflow:hidden;line-height:1.35}
+.card .p{font-weight:700;color:var(--pink);padding-bottom:4px}
 .card .s{font-size:11px;color:#888;padding-bottom:6px}
+.card .s.low{color:var(--bad);font-weight:700}
 .pk .img{background:#fff3c4}
-#cartPanel{flex:none;background:#fff;border-top:2px solid #e8336d;box-shadow:0 -4px 10px #0001;display:flex;flex-direction:column;max-height:38vh}
+#cartPanel{flex:none;background:#fff;border-top:2px solid var(--pink);box-shadow:0 -4px 10px #0001;display:flex;flex-direction:column;max-height:38vh}
 .cartHead{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-weight:700;font-size:14px;border-bottom:1px solid #eee;flex:none}
-.cartHead a{color:#e8336d;font-weight:400;font-size:13px}
+.cartHead a{font-weight:400;font-size:13px}
 #lines{overflow-y:auto;flex:1;min-height:40px;padding:0 12px}
 .line{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f2f2f2;font-size:14px}
 .line .nm{flex:1;min-width:0}
 .line small{display:block;color:#888;font-size:11px}
 .qty{display:flex;align-items:center;gap:6px}
-.qty button{width:28px;height:28px;border-radius:50%;border:1px solid #ccc;background:#fff;font-size:16px;line-height:1}
+.qty button{width:30px;height:30px;border-radius:50%;border:1px solid #ccc;background:#fff;font-size:16px;line-height:1}
 .qty b{min-width:18px;text-align:center}
-.lt{width:60px;text-align:right;font-weight:700}
-.empty{color:#999;font-size:13px;padding:10px 0;text-align:center}
-.payWrap{padding:8px 12px 12px;flex:none}
-.btn{width:100%;padding:14px;border:0;border-radius:10px;background:#e8336d;color:#fff;font-size:17px;font-weight:700}
-.btn.g{background:#eee;color:#333}
-.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;z-index:10}
-.modal.on{display:flex}
-.sheet{background:#fff;width:100%;border-radius:16px 16px 0 0;padding:16px;max-height:90vh;overflow-y:auto}
-.sheet h3{margin-bottom:10px}
-label{display:block;font-size:13px;color:#666;margin:10px 0 4px}
-input,select,textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px}
-.row{display:flex;gap:8px}.row>*{flex:1}
+.lt{width:64px;text-align:right;font-weight:700}
+.payWrap{padding:8px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom));flex:none}
 .pay{display:flex;gap:8px;margin-top:4px}
 .pay button{flex:1;padding:12px 4px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px}
-.pay button.on{border-color:#e8336d;background:#fde3ec;font-weight:700}
+.pay button.on{border-color:var(--pink);background:var(--pink-soft);font-weight:700}
 .tot{display:flex;justify-content:space-between;font-size:20px;font-weight:700;margin:14px 0}
-.qr{width:240px;height:240px;margin:10px auto;background:repeating-linear-gradient(45deg,#000 0 8px,#fff 8px 16px);border:10px solid #fff;outline:2px solid #000}
-.box{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px}
+.qrimg{display:block;max-width:280px;width:100%;margin:10px auto;border-radius:8px}
+.qrfull{position:fixed;inset:0;background:#fff;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.qrfull.on{display:flex}
+.qrfull img{max-width:92vw;max-height:70vh}
+.qrfull .amt{font-size:32px;font-weight:800;color:var(--pink);margin:14px 0}
 .kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.kpi div{background:#fff;border-radius:12px;padding:12px}
-.kpi b{display:block;font-size:22px;color:#e8336d}
-table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px;border-bottom:1px solid #eee;text-align:left}
+.kpi div{background:#fff;border-radius:12px;padding:12px;font-size:13px;color:#666}
+.kpi b{display:block;font-size:22px;color:var(--pink);margin-top:2px}
 .opt{display:flex;flex-wrap:wrap;gap:6px}
-.opt button{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff}
-.opt button.on{background:#e8336d;color:#fff;border-color:#e8336d}
+.opt button{padding:9px 12px;border:1px solid #ccc;border-radius:8px;background:#fff}
+.opt button.on{background:var(--pink);color:#fff;border-color:var(--pink)}
 .ok{text-align:center}
-.ok .ic{font-size:56px}
-.ok .bn{font-size:34px;font-weight:800;color:#e8336d;letter-spacing:1px;margin:4px 0}
+.ok .ic{font-size:52px}
+.ok .bn{font-size:34px;font-weight:800;color:var(--pink);letter-spacing:1px;margin:4px 0}
 .rc{background:#fafafa;border-radius:10px;padding:10px;text-align:left;margin:12px 0;font-size:14px}
-.rc .r{display:flex;justify-content:space-between;padding:3px 0}
-.rc small{color:#888}
+.rc .r{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
+.rc small{color:#888;display:block;font-size:11px}
 .bill{background:#fff;border-radius:12px;margin-bottom:8px;overflow:hidden}
 .bill .h{display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer}
-.bill .h b{color:#e8336d}
+.bill .h b{color:var(--pink)}
 .bill .d{display:none;padding:0 12px 12px;font-size:13px}
 .bill.open .d{display:block}
-.tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#eee;margin-left:6px}
+.menu{position:absolute;right:10px;top:54px;background:#fff;border-radius:12px;box-shadow:0 6px 24px #0003;z-index:30;display:none;min-width:180px;overflow:hidden}
+.menu.on{display:block}
+.menu a,.menu div{display:block;padding:12px 16px;color:var(--text);border-bottom:1px solid #f0f0f0;font-size:15px;text-decoration:none}
+.menu div{color:var(--muted);font-size:12px}
+tr.low td{color:var(--bad)}
 </style></head><body>
-<header><span>MayProtein POS</span><span style="font-size:13px;font-weight:400">งาน: Bangkok Fit Expo</span></header>
-<div class="tabs">
-<button class="on" onclick="tab(0,this)">🛒 ขาย</button>
-<button onclick="tab(1,this)">🧾 รายการขาย</button>
-<button onclick="tab(2,this)">📦 สต็อก</button>
-<button onclick="tab(3,this)">📊 สรุป</button>
-</div>
+<header class="top">
+  <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9" id="evName"></div></div>
+  <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
+</header>
+<div class="menu" id="menu"></div>
+<div class="tabs" id="tabs"></div>
 
 <main>
-<div class="page on" id="p0">
-<div class="chips" id="chips"></div>
-<div class="grid" id="grid"></div>
-</div>
+  <div class="page on" id="p-sell">
+    <input class="search" id="q" placeholder="🔍 ค้นหาสินค้า / SKU" autocomplete="off">
+    <div class="chips" id="chips"></div>
+    <div class="grid" id="grid"><div class="loading"><span class="spin dark"></span>กำลังโหลดสินค้า</div></div>
+  </div>
 
-<div class="page" id="p1">
-<div class="box" style="display:flex;justify-content:space-between"><span>บิลวันนี้ <b id="bCnt">0</b> บิล</span><span>รวม <b id="bSum" style="color:#e8336d">0</b> ฿</span></div>
-<div id="billList"></div>
-</div>
+  <div class="page" id="p-bills">
+    <div class="box" style="display:flex;justify-content:space-between;align-items:center">
+      <span>บิลวันนี้ <b id="bCnt">0</b> บิล · รวม <b id="bSum" style="color:var(--pink)">0</b> ฿</span>
+      <button class="btn sm line" onclick="loadToday(true)">↻</button>
+    </div>
+    <div id="billList"></div>
+  </div>
 
-<div class="page" id="p2">
-<div class="box">
-<label>ชื่องาน / สถานที่</label><input value="Bangkok Fit Expo">
-<label>สินค้า</label><select id="stkItem"></select>
-<label>จำนวนที่เพิ่ม</label><input type="number" inputmode="numeric" id="stkQty" value="10">
-<label>หมายเหตุ</label><input placeholder="เช่น เติมของรอบบ่าย">
-<br><br><button class="btn" onclick="addStock()">+ เพิ่มสต็อก</button>
-</div>
-<div class="box"><b>สต็อกคงเหลือ</b><table id="stkTable"></table></div>
-</div>
+  <div class="page" id="p-stock">
+    <div class="box">
+      <label>ชื่องาน / สถานที่ (ใช้บันทึกกับทุกบิล)</label>
+      <div class="row"><input id="evInput" placeholder="เช่น Bangkok Fit Expo"><button class="btn sm g" style="flex:none" onclick="saveEvent()">บันทึก</button></div>
+    </div>
+    <div class="box">
+      <b>เพิ่มสต็อก</b>
+      <label>สินค้า</label><select id="stkItem"></select>
+      <label>จำนวนที่เพิ่ม (ใส่ติดลบเพื่อลด)</label><input type="number" inputmode="numeric" id="stkQty" value="10">
+      <label>หมายเหตุ</label><input id="stkNote" placeholder="เช่น เติมของรอบบ่าย">
+      <br><br><button class="btn" id="stkBtn" onclick="addStock()">+ เพิ่มสต็อก</button>
+    </div>
+    <div class="box"><div style="display:flex;justify-content:space-between;align-items:center"><b>สต็อกคงเหลือ</b><a onclick="loadCatalog()">↻ รีเฟรช</a></div><table id="stkTable"></table></div>
+  </div>
 
-<div class="page" id="p3">
-<div class="kpi">
-<div>ยอดขายรวม<b id="kTotal">0</b></div>
-<div>จำนวนบิล<b id="kBills">0</b></div>
-<div>เงินสด / โอน<b id="kCash" style="font-size:16px">0 / 0</b></div>
-<div>พร้อมเพย์<b id="kPP" style="font-size:16px">0</b></div>
-</div>
-<div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
-<div class="box"><b>สินค้าที่ขายได้</b><table id="itTable"></table></div>
-<button class="btn">⬇️ ดาวน์โหลดสรุปท้ายวัน (CSV)</button>
-</div>
+  <div class="page" id="p-sum">
+    <div class="kpi">
+      <div>ยอดขายสุทธิ<b id="kTotal">0</b></div>
+      <div>จำนวนบิล<b id="kBills">0</b></div>
+      <div>💵 เงินสด<b id="kCash">0</b></div>
+      <div>🏦 โอน<b id="kTr">0</b></div>
+      <div>📱 พร้อมเพย์<b id="kPP">0</b></div>
+      <div>ส่วนลดรวม<b id="kDisc">0</b></div>
+    </div>
+    <div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
+    <div class="box"><b>สินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><table id="itTable"></table></div>
+    <button class="btn" onclick="downloadCsv()">⬇️ ดาวน์โหลดสรุปท้ายวัน (CSV)</button><br><br>
+  </div>
 </main>
 
 <div id="cartPanel">
-<div class="cartHead"><span>🛒 ตะกร้า (<span id="cnt">0</span> ชิ้น)</span><a onclick="cart=[];renderCart()">ล้างตะกร้า</a></div>
-<div id="lines"></div>
-<div class="payWrap"><button class="btn" onclick="openCheckout()">ชำระเงิน · <span id="sum">0</span> บาท</button></div>
+  <div class="cartHead"><span>🛒 ตะกร้า (<span id="cnt">0</span> ชิ้น)</span><a onclick="clearCart()">ล้างตะกร้า</a></div>
+  <div id="lines"></div>
+  <div class="payWrap"><button class="btn" onclick="openCheckout()">ชำระเงิน · <span id="sum">0</span> บาท</button></div>
 </div>
 
 <div class="modal" id="mVar"><div class="sheet" id="varSheet"></div></div>
 <div class="modal" id="mPk"><div class="sheet" id="pkSheet"></div></div>
 <div class="modal" id="mOk"><div class="sheet ok" id="okSheet"></div></div>
 <div class="modal" id="mPay"><div class="sheet">
-<h3>ชำระเงิน</h3>
-<div class="tot"><span>รวม</span><span id="sub">0</span></div>
-<label>ส่วนลดท้ายบิล</label>
-<div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()"><option value="baht">บาท</option><option value="pct">%</option></select></div>
-<label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
-<label>วิธีชำระเงิน</label>
-<div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน</button><button data-m="promptpay">📱 พร้อมเพย์</button></div>
-<div id="qrBox" style="display:none;text-align:center"><div class="qr"></div><small>รูป QR ที่อัปโหลดไว้ (ตัวอย่าง)</small></div>
-<div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
-<button class="btn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
-<button class="btn g" onclick="close_('mPay')">ยกเลิก</button>
+  <h3>ชำระเงิน</h3>
+  <div class="tot"><span>รวม</span><span id="sub">0</span></div>
+  <label>ส่วนลดท้ายบิล</label>
+  <div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()" style="flex:none;width:90px"><option value="baht">บาท</option><option value="percent">%</option></select></div>
+  <label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
+  <label>วิธีชำระเงิน</label>
+  <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน</button><button data-m="promptpay">📱 พร้อมเพย์</button></div>
+  <div id="qrBox" style="display:none;text-align:center"></div>
+  <div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
+  <button class="btn" id="payBtn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
+  <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
 </div></div>
+<div class="qrfull" id="qrFull" onclick="this.classList.remove('on')"></div>
 
+<script src="config.js"></script>
+<script src="api.js"></script>
 <script>
-const products=[
-{id:'P001',name:'May Protein กล้วย',cat:'อาหารเสริม',sub:'โปรตีน',price:60,stock:50,e:'🍌'},
-{id:'P002',name:'May Protein โกโก้',cat:'อาหารเสริม',sub:'โปรตีน',price:60,stock:50,e:'🍫'},
-{id:'P003',name:'May Protein พีช',cat:'อาหารเสริม',sub:'โปรตีน',price:60,stock:50,e:'🍑'},
-{id:'P005',name:'Pre-Workout',cat:'อาหารเสริม',sub:'พรีเวิร์กเอาต์',price:90,stock:30,e:'⚡'},
-{id:'P006',name:'เสื้อยืด May',cat:'เสื้อผ้า',sub:'More',price:350,stock:15,e:'👕'},
-{id:'P004',name:'ถุงเท้ากีฬา',cat:'อุปกรณ์',sub:'More',price:150,e:'🧦',variants:[
- {id:'V001',size:'M',color:'ดำ',stock:20},{id:'V002',size:'L',color:'ดำ',stock:20},{id:'V003',size:'M',color:'ขาว',stock:20},{id:'V004',size:'L',color:'ขาว',stock:20}]}
-];
-const packages=[{id:'PK001',name:'เซตโปรตีน 3 ซอง',price:120,e:'🎁',slots:[
- {slot:'A',items:['P001','P002','P003']},{slot:'B',items:['P001','P002','P003']},{slot:'C',items:['P003']}]}];
-const MLABEL={cash:'💵 เงินสด',transfer:'🏦 โอน',promptpay:'📱 พร้อมเพย์'};
-let cart=[],sales=[],cat='ทั้งหมด',method='cash',billNo=0;
-const P=id=>products.find(p=>p.id===id);
-function tab(i,b){document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('on',i===j));
-document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-document.getElementById('cartPanel').style.display=i===0?'flex':'none';if(i===1)renderBills();if(i===2)renderStock();if(i===3)renderSum();}
-function renderChips(){const cs=['ทั้งหมด','แพ็กเกจ','อาหารเสริม','เสื้อผ้า','อุปกรณ์'];
-document.getElementById('chips').innerHTML=cs.map(c=>`<div class="chip ${c===cat?'on':''}" onclick="cat='${c}';renderChips();renderGrid()">${c}</div>`).join('');}
-function stockOf(p){return p.variants?p.variants.reduce((a,v)=>a+v.stock,0):p.stock}
-function inCart(prefix){return cart.filter(c=>c.key===prefix||c.key.startsWith(prefix+'|')||c.pid===prefix).reduce((a,c)=>a+c.qty,0)}
-function badge(n){return n?`<div class="badge">${n}</div>`:''}
-function renderGrid(){let h='';
-if(cat==='ทั้งหมด'||cat==='แพ็กเกจ')h+=packages.map(k=>`<div class="card pk" onclick="openPk('${k.id}')">${badge(inCart(k.id))}<div class="img">${k.e}</div><div class="n">${k.name}</div><div class="p">${k.price}฿</div><div class="s">แพ็กเกจ</div></div>`).join('');
-if(cat!=='แพ็กเกจ')h+=products.filter(p=>cat==='ทั้งหมด'||p.cat===cat).map(p=>`<div class="card" onclick="tapP('${p.id}')">${badge(inCart(p.id))}<div class="img">${p.e}</div><div class="n">${p.name}</div><div class="p">${p.price}฿</div><div class="s">คงเหลือ ${stockOf(p)}</div></div>`).join('');
-document.getElementById('grid').innerHTML=h;}
-function addLine(line){const ex=cart.find(c=>c.key===line.key);if(ex)ex.qty++;else cart.push({...line,qty:1});renderCart();}
-function tapP(id){const p=P(id);if(p.variants)return openVar(p);addLine({key:p.id,name:p.name,price:p.price,items:[{id:p.id,name:p.name}]});}
-function openVar(p){document.getElementById('varSheet').innerHTML=`<h3>${p.name}</h3><div class="opt">${p.variants.map(v=>`<button onclick="addVar('${p.id}','${v.id}')">${v.size} / ${v.color} (${v.stock})</button>`).join('')}</div><br><button class="btn g" onclick="close_('mVar')">ปิด</button>`;document.getElementById('mVar').classList.add('on');}
-function addVar(pid,vid){const p=P(pid),v=p.variants.find(x=>x.id===vid);const n=`${p.name} ${v.size}/${v.color}`;close_('mVar');addLine({key:vid,pid,name:n,price:p.price,items:[{id:vid,pid,name:n}]});}
-let pkSel={};
-function openPk(id){const k=packages.find(x=>x.id===id);pkSel={};
-document.getElementById('pkSheet').innerHTML=`<h3>${k.name} · ${k.price}฿</h3>`+k.slots.map(s=>`<label>ช่อง ${s.slot}</label><div class="opt">${s.items.map(i=>`<button id="o${s.slot}${i}" onclick="selSlot('${s.slot}','${i}')">${P(i).name}</button>`).join('')}</div>`).join('')+`<br><button class="btn" onclick="addPk('${id}')">เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="close_('mPk')">ยกเลิก</button>`;
-k.slots.forEach(s=>{if(s.items.length===1)selSlot(s.slot,s.items[0])});document.getElementById('mPk').classList.add('on');}
-function selSlot(s,i){pkSel[s]=i;document.querySelectorAll(`[id^="o${s}"]`).forEach(b=>b.classList.toggle('on',b.id==='o'+s+i));}
-function addPk(id){const k=packages.find(x=>x.id===id);if(k.slots.some(s=>!pkSel[s.slot]))return alert('เลือกให้ครบทุกช่อง');
-const sel=k.slots.map(s=>pkSel[s.slot]);close_('mPk');
-addLine({key:id+'|'+sel.join(','),name:k.name,price:k.price,pk:id,items:k.slots.map(s=>({id:pkSel[s.slot],slot:s.slot,name:P(pkSel[s.slot]).name}))});}
-function chg(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);renderCart();}
-function subTxt(c){return c.pk?'<small>'+c.items.map(x=>x.slot+': '+x.name.replace('May Protein ','')).join(' · ')+'</small>':''}
-function renderCart(){document.getElementById('lines').innerHTML=cart.map((c,i)=>`<div class="line"><div class="nm">${c.name}${subTxt(c)}<small>${c.price}฿ / ชิ้น</small></div><div class="qty"><button onclick="chg(${i},-1)">−</button><b>${c.qty}</b><button onclick="chg(${i},1)">+</button></div><div class="lt">${c.price*c.qty}฿</div></div>`).join('')||'<div class="empty">แตะสินค้าด้านบนเพื่อเพิ่มลงตะกร้า</div>';
-document.getElementById('sum').textContent=cart.reduce((a,c)=>a+c.price*c.qty,0);
-document.getElementById('cnt').textContent=cart.reduce((a,c)=>a+c.qty,0);renderGrid();}
-function close_(m){document.getElementById(m).classList.remove('on')}
-function openCheckout(){if(!cart.length)return;document.getElementById('mPay').classList.add('on');calc();}
-document.querySelectorAll('#pay button').forEach(b=>b.onclick=()=>{method=b.dataset.m;document.querySelectorAll('#pay button').forEach(x=>x.classList.toggle('on',x===b));document.getElementById('qrBox').style.display=method==='promptpay'?'block':'none';});
-function calc(){const s=cart.reduce((a,c)=>a+c.price*c.qty,0),d=+document.getElementById('disc').value||0,t=document.getElementById('dtype').value;
-const da=Math.min(s,t==='pct'?s*d/100:d);document.getElementById('sub').textContent=s;document.getElementById('net').textContent=(s-da).toFixed(0);return{s,da};}
-function deduct(it,q){if(it.pid){P(it.pid).variants.find(v=>v.id===it.id).stock-=q}else P(it.id).stock-=q}
-function receiptHtml(b){return `<div class="rc">${b.lines.map(c=>`<div class="r"><span>${c.name} × ${c.qty}${subTxt(c)}</span><span>${c.price*c.qty}฿</span></div>`).join('')}
-<div class="r" style="border-top:1px dashed #ccc;margin-top:6px;padding-top:6px"><span>รวม</span><span>${b.sub}฿</span></div>
-${b.disc?`<div class="r"><span>ส่วนลด</span><span>-${b.disc.toFixed(0)}฿</span></div>`:''}
-<div class="r"><b>ยอดสุทธิ</b><b>${b.total.toFixed(0)}฿</b></div>
-<div class="r"><small>ชำระโดย</small><small>${MLABEL[b.method]}</small></div>
-${b.note?`<div class="r"><small>หมายเหตุ: ${b.note}</small></div>`:''}</div>`}
-function pay(){const {s,da}=calc();cart.forEach(c=>c.items.forEach(it=>deduct(it,c.qty)));
-billNo++;const id='B'+String(billNo).padStart(4,'0');
-const now=new Date();const time=now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
-const b={id,time,sub:s,disc:da,total:s-da,method,note:document.getElementById('note').value.trim(),lines:cart};
-sales.unshift(b);cart=[];renderCart();close_('mPay');
-document.getElementById('disc').value=0;document.getElementById('note').value='';
-document.getElementById('okSheet').innerHTML=`<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${id}</div><small style="color:#888">เวลา ${time} น.</small>${receiptHtml(b)}<button class="btn" onclick="close_('mOk')">🛒 บิลถัดไป</button>`;
-document.getElementById('mOk').classList.add('on');}
-function renderBills(){document.getElementById('bCnt').textContent=sales.length;
-document.getElementById('bSum').textContent=sales.reduce((a,x)=>a+x.total,0).toFixed(0);
-document.getElementById('billList').innerHTML=sales.map((b,i)=>`<div class="bill" id="bl${i}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${b.id}</b><span class="tag">${MLABEL[b.method]}</span><br><small style="color:#888">${b.time} น. · ${b.lines.reduce((a,c)=>a+c.qty,0)} ชิ้น</small></span><b>${b.total.toFixed(0)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('')||'<div class="empty">ยังไม่มีการขายวันนี้</div>';}
-function allItems(){let a=[];products.forEach(p=>p.variants?p.variants.forEach(v=>a.push({id:v.id,name:`${p.name} ${v.size}/${v.color}`,stock:v.stock,ref:v})):a.push({id:p.id,name:p.name,stock:p.stock,ref:p}));return a}
-function renderStock(){const a=allItems();document.getElementById('stkItem').innerHTML=a.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
-document.getElementById('stkTable').innerHTML=a.map(x=>`<tr><td>${x.name}</td><td>${x.stock}</td></tr>`).join('');}
-function addStock(){const id=document.getElementById('stkItem').value,q=+document.getElementById('stkQty').value;allItems().find(x=>x.id===id).ref.stock+=q;renderStock();alert('เพิ่มสต็อกแล้ว');}
-function renderSum(){const by=m=>sales.filter(x=>x.method===m).reduce((a,x)=>a+x.total,0);
-document.getElementById('kTotal').textContent=sales.reduce((a,x)=>a+x.total,0).toFixed(0);document.getElementById('kBills').textContent=sales.length;
-document.getElementById('kCash').textContent=by('cash').toFixed(0)+' / '+by('transfer').toFixed(0);document.getElementById('kPP').textContent=by('promptpay').toFixed(0);
-const pk={},it={};sales.forEach(s=>s.lines.forEach(c=>{if(c.pk)pk[c.name]=(pk[c.name]||0)+c.qty;c.items.forEach(x=>it[x.name]=(it[x.name]||0)+c.qty)}));
-document.getElementById('pkTable').innerHTML=Object.entries(pk).map(([k,v])=>`<tr><td>${k}</td><td>${v} เซต</td></tr>`).join('')||'<tr><td>-</td></tr>';
-document.getElementById('itTable').innerHTML=Object.entries(it).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')||'<tr><td>-</td></tr>';}
-renderChips();renderCart();
+const esc = POS.esc, money = POS.money;
+const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '📱 พร้อมเพย์' };
+const EMOJI = { 'โปรตีน': '🥤', 'พรีเวิร์กเอาต์': '⚡', 'เสื้อผ้า': '👕', 'อุปกรณ์': '🧦', 'อาหารเสริม': '💊' };
+let me = null, cat = { products: [], variants: [], packages: [], settings: {} };
+let cart = [], chip = 'ทั้งหมด', method = 'cash', today = { bills: [] }, clientId = null, paying = false;
+
+const $ = id => document.getElementById(id);
+const P = id => cat.products.find(p => p.product_id === id);
+const V = id => cat.variants.find(v => v.variant_id === id);
+const varsOf = pid => cat.variants.filter(v => v.product_id === pid);
+function vName(v) { const p = P(v.product_id); return (p ? p.name : '') + ' ' + [v.size, v.color].filter(Boolean).join('/'); }
+function vPrice(v) { return v.price == null ? (P(v.product_id) || {}).price || 0 : v.price; }
+function itemName(id) { const p = P(id); if (p) return p.name; const v = V(id); return v ? vName(v) : id; }
+function itemStock(id) { const p = P(id); if (p && !p.has_variants) return p.stock_qty; const v = V(id); return v ? v.stock_qty : null; }
+function imgHtml(url, fallback) { return url ? `<img src="${esc(url)}" loading="lazy" alt="">` : fallback; }
+function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'; }
+
+/* ---------- boot ---------- */
+POS.requireLogin(u => { me = u; boot(); });
+
+function boot() {
+  $('whoName').textContent = me.display_name;
+  const tabs = [['sell', '🛒 ขาย'], ...(POS.isAdmin() ? [['bills', '🧾 รายการขาย']] : []), ['stock', '📦 สต็อก'], ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
+  $('tabs').innerHTML = tabs.map(([k, l], i) => `<button data-t="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
+  $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
+    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a>' : '') + '<a onclick="POS.logout()">ออกจากระบบ</a>';
+  $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
+  document.addEventListener('click', () => $('menu').classList.remove('on'));
+  $('q').oninput = renderGrid;
+  document.querySelectorAll('#pay button').forEach(b => b.onclick = () => { method = b.dataset.m; document.querySelectorAll('#pay button').forEach(x => x.classList.toggle('on', x === b)); renderQr(); });
+  renderCart();
+  loadCatalog();
+}
+
+async function loadCatalog() {
+  try {
+    const r = await POS.call('getCatalog');
+    cat = r;
+    $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
+    if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
+    showEvent();
+    cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
+    renderChips(); renderCart(); renderStock();
+  } catch (e) { POS.toast(e.message, true); $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
+}
+
+function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = ev ? '📍 ' + ev : ''; $('evInput').value = ev; }
+function saveEvent() { POS.pref('event', $('evInput').value.trim()); showEvent(); POS.toast('บันทึกชื่องานแล้ว'); }
+
+function tab(k, b) {
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + k));
+  $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('cartPanel').style.display = k === 'sell' ? 'flex' : 'none';
+  if (k === 'bills' || k === 'sum') loadToday();
+  if (k === 'stock') renderStock();
+}
+
+/* ---------- sell ---------- */
+function renderChips() {
+  const cats = [...new Set(cat.products.map(p => p.category).filter(Boolean))];
+  const cs = ['ทั้งหมด', ...(cat.packages.length ? ['แพ็กเกจ'] : []), ...cats];
+  if (!cs.includes(chip)) chip = 'ทั้งหมด';
+  $('chips').innerHTML = cs.map(c => `<div class="chip ${c === chip ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}</div>`).join('');
+  $('chips').querySelectorAll('.chip').forEach(el => el.onclick = () => { chip = el.dataset.c; renderChips(); renderGrid(); });
+  renderGrid();
+}
+function inCart(id) { return cart.filter(c => c.id === id || c.pid === id).reduce((a, c) => a + c.qty, 0); }
+function badge(n) { return n ? `<div class="badge">${n}</div>` : ''; }
+function stockTxt(n) { return `<div class="s ${n <= 0 ? 'low' : ''}">คงเหลือ ${n}</div>`; }
+function renderGrid() {
+  const q = $('q').value.trim().toLowerCase();
+  const hit = (...s) => !q || s.some(x => String(x || '').toLowerCase().includes(q));
+  let h = '';
+  if (chip === 'ทั้งหมด' || chip === 'แพ็กเกจ') h += cat.packages.filter(k => hit(k.name)).map(k => `<div class="card pk" onclick="openPk('${k.package_id}')">${badge(inCart(k.package_id))}<div class="img">${imgHtml(k.image_url, '🎁')}</div><div class="n">${esc(k.name)}</div><div class="p">${money(k.price)}฿</div><div class="s">แพ็กเกจ</div></div>`).join('');
+  if (chip !== 'แพ็กเกจ') h += cat.products.filter(p => (chip === 'ทั้งหมด' || p.category === chip) && hit(p.name, p.sku, p.subcategory, ...varsOf(p.product_id).map(v => v.sku))).map(p => {
+    const vs = varsOf(p.product_id);
+    const st = p.has_variants ? vs.reduce((a, v) => a + v.stock_qty, 0) : p.stock_qty;
+    const price = p.has_variants && vs.length ? Math.min(...vs.map(vPrice)) : p.price;
+    return `<div class="card" onclick="tapP('${p.product_id}')">${badge(inCart(p.product_id))}<div class="img">${imgHtml(p.image_url, emojiOf(p))}</div><div class="n">${esc(p.name)}</div><div class="p">${money(price)}฿</div>${stockTxt(st)}</div>`;
+  }).join('');
+  $('grid').innerHTML = h || '<div class="empty" style="grid-column:1/-1">ไม่พบสินค้า</div>';
+}
+function addLine(line) { const ex = cart.find(c => c.key === line.key); if (ex) ex.qty++; else cart.push({ ...line, qty: 1 }); renderCart(); }
+function tapP(id) {
+  const p = P(id);
+  if (p.has_variants) return openVar(p);
+  addLine({ key: id, type: 'product', id, name: p.name, price: p.price });
+}
+function openVar(p) {
+  const vs = varsOf(p.product_id);
+  $('varSheet').innerHTML = `<h3>${esc(p.name)}</h3>` + (vs.length ? `<div class="opt">${vs.map(v => `<button onclick="addVar('${v.variant_id}')">${esc([v.size, v.color].filter(Boolean).join(' / '))} <small style="opacity:.7">(${v.stock_qty})</small></button>`).join('')}</div>` : '<div class="empty">ยังไม่มีตัวเลือกไซซ์/สี</div>') + `<br><button class="btn g" onclick="closeM('mVar')">ปิด</button>`;
+  $('mVar').classList.add('on');
+}
+function addVar(vid) { const v = V(vid); closeM('mVar'); addLine({ key: vid, type: 'variant', id: vid, pid: v.product_id, name: vName(v), price: vPrice(v) }); }
+
+let pkSel = {};
+function openPk(id) {
+  const k = cat.packages.find(x => x.package_id === id); pkSel = {};
+  $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}` + k.slots.map(s => {
+    const label = `<label>ช่อง ${esc(s.slot)}${s.qty > 1 ? ' × ' + s.qty : ''}</label>`;
+    if (s.items.length > 5) return label + `<select onchange="pkSel['${esc(s.slot)}']=this.value"><option value="">— เลือกสินค้า —</option>${s.items.map(i => `<option value="${esc(i)}">${esc(itemName(i))} (เหลือ ${itemStock(i) ?? '-'})</option>`).join('')}</select>`;
+    return label + `<div class="opt">${s.items.map(i => `<button data-s="${esc(s.slot)}" data-i="${esc(i)}" onclick="selSlot(this)">${esc(itemName(i).replace(/^May Protein /, ''))}</button>`).join('')}</div>`;
+  }).join('') + `<br><button class="btn" onclick="addPk('${id}')">เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
+  k.slots.forEach(s => { if (s.items.length === 1) { pkSel[s.slot] = s.items[0]; const b = $('pkSheet').querySelector(`button[data-s="${CSS.escape(s.slot)}"]`); if (b) b.classList.add('on'); } });
+  $('mPk').classList.add('on');
+}
+function selSlot(b) { pkSel[b.dataset.s] = b.dataset.i; $('pkSheet').querySelectorAll(`button[data-s="${CSS.escape(b.dataset.s)}"]`).forEach(x => x.classList.toggle('on', x === b)); }
+function addPk(id) {
+  const k = cat.packages.find(x => x.package_id === id);
+  if (k.slots.some(s => !pkSel[s.slot])) return POS.toast('เลือกสินค้าให้ครบทุกช่อง', true);
+  const selections = {}; k.slots.forEach(s => selections[s.slot] = pkSel[s.slot]);
+  closeM('mPk');
+  addLine({ key: id + '|' + k.slots.map(s => pkSel[s.slot]).join(','), type: 'package', id, name: k.name, price: k.price, selections, desc: k.slots.map(s => s.slot + ': ' + itemName(pkSel[s.slot]).replace(/^May Protein /, '')).join(' · ') });
+}
+function chg(i, d) { cart[i].qty += d; if (cart[i].qty <= 0) cart.splice(i, 1); renderCart(); }
+function clearCart() { if (cart.length && confirm('ล้างสินค้าทั้งหมดในตะกร้า?')) { cart = []; renderCart(); } }
+function cartTotal() { return cart.reduce((a, c) => a + c.price * c.qty, 0); }
+function renderCart() {
+  $('lines').innerHTML = cart.map((c, i) => `<div class="line"><div class="nm">${esc(c.name)}${c.desc ? `<small>${esc(c.desc)}</small>` : ''}<small>${money(c.price)}฿ / ชิ้น</small></div><div class="qty"><button onclick="chg(${i},-1)">−</button><b>${c.qty}</b><button onclick="chg(${i},1)">+</button></div><div class="lt">${money(c.price * c.qty)}฿</div></div>`).join('') || '<div class="empty">แตะสินค้าด้านบนเพื่อเพิ่มลงตะกร้า</div>';
+  $('sum').textContent = money(cartTotal());
+  $('cnt').textContent = cart.reduce((a, c) => a + c.qty, 0);
+  renderGrid();
+}
+function closeM(m) { $(m).classList.remove('on'); }
+
+/* ---------- checkout ---------- */
+function openCheckout() { if (!cart.length) return; clientId = POS.uuid(); $('mPay').classList.add('on'); calc(); renderQr(); }
+function calc() {
+  const s = cartTotal(), d = Math.max(0, +$('disc').value || 0), t = $('dtype').value;
+  const da = Math.min(s, t === 'percent' ? s * Math.min(d, 100) / 100 : d);
+  $('sub').textContent = money(s); $('net').textContent = money(s - da);
+  if ($('qrFull').classList.contains('on')) renderQr();
+  return { s, da, net: s - da };
+}
+function renderQr() {
+  const box = $('qrBox');
+  if (method !== 'promptpay') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const url = cat.settings.promptpay_qr_image_url;
+  box.innerHTML = url ? `<img class="qrimg" src="${esc(url)}" alt="QR"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty">ยังไม่ได้อัปโหลดรูป QR (แอดมินตั้งค่าได้ที่หลังบ้าน)</div>';
+}
+function showQrFull() {
+  const url = cat.settings.promptpay_qr_image_url;
+  $('qrFull').innerHTML = `<img src="${esc(url)}" alt="QR"><div class="amt">${money(calc().net)} บาท</div><div style="color:#888">แตะเพื่อปิด</div>`;
+  $('qrFull').classList.add('on');
+}
+async function pay() {
+  if (paying) return;
+  const { net } = calc();
+  paying = true; $('payBtn').disabled = true; $('payBtn').innerHTML = '<span class="spin"></span> กำลังบันทึก';
+  try {
+    const r = await POS.call('createSale', {
+      client_id: clientId, event_name: POS.pref('event') || '', payment_method: method,
+      discount_type: $('dtype').value, discount_value: +$('disc').value || 0, note: $('note').value.trim(),
+      lines: cart.map(c => ({ type: c.type, id: c.id, qty: c.qty, selections: c.selections }))
+    });
+    const b = r.bill;
+    if (Math.abs(b.total - net) > 0.01) POS.toast('ยอดสุทธิจากเซิร์ฟเวอร์: ' + money(b.total) + ' บาท');
+    cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
+    $('disc').value = 0; $('note').value = ''; clientId = null;
+    $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
+    $('mOk').classList.add('on');
+    loadCatalog();
+  } catch (e) { POS.toast(e.message, true); }
+  paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย';
+}
+function receiptHtml(b) {
+  const head = b.items.filter(i => !i.slot);
+  return `<div class="rc">${head.map(it => {
+    const comps = it.package_id ? b.items.filter(x => x.slot && x.package_set_no === it.package_set_no) : [];
+    return `<div class="r"><span>${esc(it.item_name)} × ${it.qty}${comps.length ? `<small>${comps.map(c => esc(c.slot + ': ' + c.item_name.replace(/^May Protein /, ''))).join(' · ')}</small>` : ''}</span><span>${money(it.line_total)}฿</span></div>`;
+  }).join('')}
+  <div class="r" style="border-top:1px dashed #ccc;margin-top:6px;padding-top:6px"><span>รวม</span><span>${money(b.subtotal)}฿</span></div>
+  ${b.discount_amount ? `<div class="r"><span>ส่วนลด${b.discount_type === 'percent' ? ' ' + b.discount_value + '%' : ''}</span><span>-${money(b.discount_amount)}฿</span></div>` : ''}
+  <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
+  <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
+  ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}</div>`;
+}
+
+/* ---------- stock ---------- */
+function stockItems() {
+  const a = [];
+  cat.products.forEach(p => {
+    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: vName(v), stock: v.stock_qty, cat: p.category }));
+    else a.push({ id: p.product_id, name: p.name, stock: p.stock_qty, cat: p.category });
+  });
+  return a;
+}
+function renderStock() {
+  const a = stockItems(), sel = $('stkItem').value;
+  $('stkItem').innerHTML = a.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (เหลือ ${x.stock})</option>`).join('');
+  if (sel) $('stkItem').value = sel;
+  $('stkTable').innerHTML = a.map(x => `<tr class="${x.stock <= 0 ? 'low' : ''}"><td>${esc(x.name)}</td><td class="n">${x.stock}</td></tr>`).join('') || '<tr><td class="empty">ยังไม่มีสินค้า</td></tr>';
+}
+async function addStock() {
+  const id = $('stkItem').value, q = Math.round(+$('stkQty').value || 0);
+  if (!id || !q) return POS.toast('เลือกสินค้าและใส่จำนวน', true);
+  const btn = $('stkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  try {
+    const r = await POS.call('addStock', { item_id: id, qty: q, note: $('stkNote').value.trim(), event_name: POS.pref('event') || '' });
+    const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty;
+    $('stkNote').value = ''; renderStock(); renderGrid();
+    POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}`);
+  } catch (e) { POS.toast(e.message, true); }
+  btn.disabled = false; btn.textContent = '+ เพิ่มสต็อก';
+}
+
+/* ---------- today (admin) ---------- */
+async function loadToday(force) {
+  if (!POS.isAdmin()) return;
+  if (!today.bills.length || force) $('billList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
+  try { today = await POS.call('todaySales'); renderBills(); renderSum(); }
+  catch (e) { POS.toast(e.message, true); }
+}
+function renderBills() {
+  const bs = today.bills;
+  $('bCnt').textContent = bs.length; $('bSum').textContent = money(bs.reduce((a, b) => a + b.total, 0));
+  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span><br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+}
+function aggregate() {
+  const bs = today.bills, by = m => bs.filter(b => b.payment_method === m).reduce((a, b) => a + b.total, 0);
+  const pk = {}, it = {};
+  bs.forEach(b => b.items.forEach(i => {
+    if (i.package_id && !i.slot) { pk[i.item_name] = (pk[i.item_name] || 0) + i.qty; return; }
+    it[i.item_name] = (it[i.item_name] || 0) + i.qty;
+  }));
+  return { total: bs.reduce((a, b) => a + b.total, 0), disc: bs.reduce((a, b) => a + b.discount_amount, 0), cash: by('cash'), tr: by('transfer'), pp: by('promptpay'), pk, it };
+}
+function renderSum() {
+  const g = aggregate();
+  $('kTotal').textContent = money(g.total); $('kBills').textContent = today.bills.length;
+  $('kCash').textContent = money(g.cash); $('kTr').textContent = money(g.tr); $('kPP').textContent = money(g.pp); $('kDisc').textContent = money(g.disc);
+  const rows = o => Object.entries(o).sort((a, b) => b[1] - a[1]);
+  $('pkTable').innerHTML = rows(g.pk).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v} เซต</td></tr>`).join('') || '<tr><td>-</td></tr>';
+  $('itTable').innerHTML = rows(g.it).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join('') || '<tr><td>-</td></tr>';
+}
+function downloadCsv() {
+  const g = aggregate(), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const out = [['สรุปยอดขาย', today.date], ['ยอดขายสุทธิ', g.total], ['จำนวนบิล', today.bills.length], ['เงินสด', g.cash], ['โอน', g.tr], ['พร้อมเพย์', g.pp], ['ส่วนลดรวม', g.disc], [],
+    ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.pk), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.it), [],
+    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note']];
+  today.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, b.payment_method, i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note])));
+  const csv = '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `mayprotein-sales-${today.date}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script></body></html>

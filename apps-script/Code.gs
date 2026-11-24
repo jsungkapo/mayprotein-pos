@@ -1,0 +1,646 @@
+/**
+ * MayProtein POS — Google Apps Script backend
+ *
+ * วิธีติดตั้ง: ดู SETUP.md ใน repo
+ * วางไฟล์นี้ใน Apps Script ที่ผูกกับ Google Sheets ฐานข้อมูล (ส่วนขยาย → Apps Script)
+ * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
+ */
+
+const SESSION_DAYS = 30;
+const MAX_LOGIN_FAILS = 5;
+const LOCK_MINUTES = 5;
+const IMAGE_FOLDER = 'MayProtein POS Images';
+
+const SCHEMA = {
+  Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
+  Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
+  Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active'],
+  PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items'],
+  StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
+  Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id'],
+  SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
+  Settings: ['key', 'value'],
+  Users: ['user_id', 'username', 'display_name', 'pin_hash', 'salt', 'role', 'status', 'created_at'],
+  Sessions: ['token', 'user_id', 'expires_at']
+};
+
+const DEFAULT_SETTINGS = {
+  shop_name: 'MayProtein',
+  current_event: '',
+  promptpay_qr_image_url: '',
+  categories: 'อาหารเสริม,เสื้อผ้า,อุปกรณ์',
+  subcategories: 'โปรตีน,พรีเวิร์กเอาต์,More',
+  units: 'ซอง,ชิ้น'
+};
+
+/* ---------------- HTTP ---------------- */
+
+function doGet() {
+  return json_({ ok: true, app: 'MayProtein POS API' });
+}
+
+function doPost(e) {
+  let req;
+  try {
+    req = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return json_({ ok: false, error: 'bad_request' });
+  }
+  try {
+    const res = route_(req);
+    return json_(Object.assign({ ok: true }, res || {}));
+  } catch (err) {
+    return json_({ ok: false, error: String((err && err.message) || err) });
+  }
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+const PUBLIC_ACTIONS = { register: register_, login: login_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, addStock: addStock_ };
+const ADMIN_ACTIONS = {
+  todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
+  saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
+  saveSettings: saveSettings_, uploadImage: uploadImage_
+};
+
+function route_(req) {
+  ensureSetup_();
+  const action = req.action;
+  const p = req.payload || {};
+  if (PUBLIC_ACTIONS[action]) return PUBLIC_ACTIONS[action](p);
+  const user = auth_(req.token);
+  if (USER_ACTIONS[action]) return USER_ACTIONS[action](p, user, req.token);
+  if (ADMIN_ACTIONS[action]) {
+    if (user.role !== 'admin') throw new Error('forbidden');
+    return ADMIN_ACTIONS[action](p, user);
+  }
+  throw new Error('unknown_action');
+}
+
+/* ---------------- Sheet helpers ---------------- */
+
+function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
+function tz_() { return ss_().getSpreadsheetTimeZone() || 'Asia/Bangkok'; }
+function sh_(name) { return ss_().getSheetByName(name); }
+function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss'); }
+function today_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'); }
+function key_(h) { return String(h).trim().split(/[\s(]/)[0]; }
+function bool_(v) { return v === true || String(v).toUpperCase() === 'TRUE'; }
+function num_(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+function str_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
+function pad_(n, w) { return String(n).padStart(w, '0'); }
+
+function norm_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm:ss');
+  return v;
+}
+
+function ensureSetup_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('setup_ok_v1')) return;
+  const book = ss_();
+  Object.keys(SCHEMA).forEach(function (name) {
+    let s = book.getSheetByName(name);
+    if (!s) {
+      s = book.insertSheet(name);
+      s.getRange(1, 1, 1, SCHEMA[name].length).setValues([SCHEMA[name]]);
+      s.setFrozenRows(1);
+    } else {
+      const lastCol = Math.max(s.getLastColumn(), 1);
+      const have = s.getRange(1, 1, 1, lastCol).getValues()[0].map(key_).filter(String);
+      const missing = SCHEMA[name].filter(function (h) { return have.indexOf(h) < 0; });
+      if (missing.length) s.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+    }
+  });
+  ['Users', 'Sessions'].forEach(function (n) {
+    const s = sh_(n);
+    s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns()).setNumberFormat('@');
+  });
+  const settings = settingsMap_();
+  Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
+    if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
+  });
+  cache.put('setup_ok_v1', '1', 600);
+}
+
+function headers_(name) {
+  const s = sh_(name);
+  return s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0].map(key_);
+}
+
+function readTable_(name) {
+  const s = sh_(name);
+  const values = s.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const hs = values[0].map(key_);
+  return values.slice(1).map(function (r, i) {
+    const o = { _row: i + 2 };
+    hs.forEach(function (h, j) { if (h) o[h] = norm_(r[j]); });
+    return o;
+  }).filter(function (o) {
+    return hs.some(function (h) { return h && o[h] !== ''; });
+  });
+}
+
+function rowFrom_(hs, obj, base) {
+  return hs.map(function (h, j) {
+    if (h && Object.prototype.hasOwnProperty.call(obj, h)) return obj[h];
+    return base ? base[j] : '';
+  });
+}
+
+function appendRow_(name, obj) {
+  sh_(name).appendRow(rowFrom_(headers_(name), obj));
+}
+
+function appendRows_(name, objs) {
+  if (!objs.length) return;
+  const s = sh_(name);
+  const hs = headers_(name);
+  const rows = objs.map(function (o) { return rowFrom_(hs, o); });
+  s.getRange(s.getLastRow() + 1, 1, rows.length, hs.length).setValues(rows);
+}
+
+function updateRow_(name, row, obj) {
+  const s = sh_(name);
+  const hs = headers_(name);
+  const range = s.getRange(row, 1, 1, hs.length);
+  const base = range.getValues()[0];
+  range.setValues([rowFrom_(hs, obj, base)]);
+}
+
+function nextId_(rows, field, prefix, width) {
+  let max = 0;
+  rows.forEach(function (r) {
+    const m = String(r[field] || '').match(new RegExp('^' + prefix + '(\\d+)$'));
+    if (m) max = Math.max(max, Number(m[1]));
+  });
+  return prefix + pad_(max + 1, width);
+}
+
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+function settingsMap_() {
+  const o = {};
+  readTable_('Settings').forEach(function (r) { if (r.key) o[r.key] = str_(r.value); });
+  return o;
+}
+
+/* ---------------- Auth ---------------- */
+
+function hash_(pin, salt) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pin, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function publicUser_(u) {
+  return { user_id: u.user_id, username: u.username, display_name: u.display_name, role: u.role, status: u.status };
+}
+
+function register_(p) {
+  const username = str_(p.username).toLowerCase();
+  const display = str_(p.display_name);
+  const pin = str_(p.pin);
+  if (!/^[a-z0-9._-]{3,20}$/.test(username)) throw new Error('ชื่อผู้ใช้ต้องเป็นภาษาอังกฤษ ตัวเลข หรือ . _ - ยาว 3–20 ตัว');
+  if (!display) throw new Error('กรุณาใส่ชื่อที่แสดง');
+  if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN ต้องเป็นตัวเลข 4–6 หลัก');
+  return withLock_(function () {
+    const users = readTable_('Users');
+    if (users.some(function (u) { return str_(u.username).toLowerCase() === username; })) throw new Error('ชื่อผู้ใช้นี้ถูกใช้แล้ว');
+    const first = users.length === 0;
+    const salt = Utilities.getUuid();
+    const user = {
+      user_id: nextId_(users, 'user_id', 'U', 3), username: username, display_name: display,
+      pin_hash: hash_(pin, salt), salt: salt,
+      role: first ? 'admin' : 'seller', status: first ? 'active' : 'pending', created_at: now_()
+    };
+    appendRow_('Users', user);
+    return { user: publicUser_(user) };
+  });
+}
+
+function login_(p) {
+  const username = str_(p.username).toLowerCase();
+  const pin = str_(p.pin);
+  const cache = CacheService.getScriptCache();
+  const failKey = 'fail_' + username;
+  const fails = num_(cache.get(failKey));
+  if (fails >= MAX_LOGIN_FAILS) throw new Error('ใส่ PIN ผิดหลายครั้ง กรุณารอ ' + LOCK_MINUTES + ' นาที');
+  const u = readTable_('Users').filter(function (x) { return str_(x.username).toLowerCase() === username; })[0];
+  if (!u || hash_(pin, str_(u.salt)) !== str_(u.pin_hash)) {
+    cache.put(failKey, String(fails + 1), LOCK_MINUTES * 60);
+    throw new Error('ชื่อผู้ใช้หรือ PIN ไม่ถูกต้อง');
+  }
+  cache.remove(failKey);
+  if (u.status === 'pending') throw new Error('บัญชีนี้รอแอดมินอนุมัติ');
+  if (u.status !== 'active') throw new Error('บัญชีนี้ถูกปิดใช้งาน');
+  const token = Utilities.getUuid() + Utilities.getUuid().slice(0, 8);
+  const expires = Date.now() + SESSION_DAYS * 86400000;
+  appendRow_('Sessions', { token: token, user_id: u.user_id, expires_at: String(expires) });
+  return { token: token, user: publicUser_(u) };
+}
+
+function auth_(token) {
+  if (!token) throw new Error('unauthorized');
+  const cache = CacheService.getScriptCache();
+  let userId = cache.get('tok_' + token);
+  if (!userId) {
+    const s = readTable_('Sessions').filter(function (r) { return r.token === token; })[0];
+    if (!s || num_(s.expires_at) < Date.now()) throw new Error('unauthorized');
+    userId = s.user_id;
+    cache.put('tok_' + token, userId, 3600);
+  }
+  const u = readTable_('Users').filter(function (x) { return x.user_id === userId; })[0];
+  if (!u || u.status !== 'active') throw new Error('unauthorized');
+  return u;
+}
+
+function me_(p, user) { return { user: publicUser_(user) }; }
+
+function logout_(p, user, token) {
+  CacheService.getScriptCache().remove('tok_' + token);
+  const s = readTable_('Sessions').filter(function (r) { return r.token === token; })[0];
+  if (s) sh_('Sessions').deleteRow(s._row);
+  return {};
+}
+
+/* ---------------- Catalog ---------------- */
+
+function cleanProduct_(r, admin) {
+  const o = {
+    product_id: str_(r.product_id), sku: str_(r.sku), name: str_(r.name), category: str_(r.category),
+    subcategory: str_(r.subcategory), unit: str_(r.unit), price: num_(r.price),
+    has_variants: bool_(r.has_variants), stock_qty: num_(r.stock_qty), description: str_(r.description),
+    image_url: str_(r.image_url), active: bool_(r.active)
+  };
+  if (admin) o.cost = num_(r.cost);
+  return o;
+}
+
+function cleanVariant_(r, admin) {
+  const o = {
+    variant_id: str_(r.variant_id), product_id: str_(r.product_id), sku: str_(r.sku), size: str_(r.size),
+    color: str_(r.color), price: r.price === '' ? null : num_(r.price), stock_qty: num_(r.stock_qty),
+    image_url: str_(r.image_url), active: bool_(r.active)
+  };
+  if (admin) o.cost = r.cost === '' ? null : num_(r.cost);
+  return o;
+}
+
+function loadPackages_() {
+  const slots = readTable_('PackageSlots');
+  return readTable_('Packages').map(function (r) {
+    return {
+      package_id: str_(r.package_id), name: str_(r.name), price: num_(r.price), description: str_(r.description),
+      image_url: str_(r.image_url), active: bool_(r.active),
+      slots: slots.filter(function (s) { return str_(s.package_id) === str_(r.package_id); }).map(function (s) {
+        return {
+          slot: str_(s.slot), qty: num_(s.qty) || 1,
+          items: str_(s.allowed_items).split(',').map(function (x) { return x.trim(); }).filter(String)
+        };
+      })
+    };
+  });
+}
+
+function catalog_(admin) {
+  const products = readTable_('Products').map(function (r) { return cleanProduct_(r, admin); });
+  const variants = readTable_('Variants').map(function (r) { return cleanVariant_(r, admin); });
+  const packages = loadPackages_();
+  if (!admin) {
+    return {
+      products: products.filter(function (p) { return p.active; }),
+      variants: variants.filter(function (v) { return v.active; }),
+      packages: packages.filter(function (k) { return k.active; }),
+      settings: settingsMap_()
+    };
+  }
+  return { products: products, variants: variants, packages: packages, settings: settingsMap_() };
+}
+
+function getCatalog_() { return catalog_(false); }
+
+/* ---------------- Stock ---------------- */
+
+function stockIndex_() {
+  const idx = {};
+  readTable_('Products').forEach(function (r) {
+    idx[str_(r.product_id)] = { sheet: 'Products', row: r._row, stock: num_(r.stock_qty), name: str_(r.name), has_variants: bool_(r.has_variants), product: r };
+  });
+  readTable_('Variants').forEach(function (r) {
+    const parent = idx[str_(r.product_id)];
+    const label = [str_(r.size), str_(r.color)].filter(String).join('/');
+    idx[str_(r.variant_id)] = {
+      sheet: 'Variants', row: r._row, stock: num_(r.stock_qty),
+      name: (parent ? parent.name : '') + (label ? ' ' + label : ''),
+      price: r.price === '' ? (parent ? num_(parent.product.price) : 0) : num_(r.price),
+      variant: r
+    };
+  });
+  return idx;
+}
+
+function changeStock_(idx, itemId, delta) {
+  const it = idx[itemId];
+  if (!it) throw new Error('ไม่พบสินค้า ' + itemId);
+  if (it.has_variants) throw new Error('สินค้า ' + it.name + ' ต้องเลือกไซซ์/สี');
+  it.stock += delta;
+  updateRow_(it.sheet, it.row, { stock_qty: it.stock });
+  return it.stock;
+}
+
+function addStock_(p, user) {
+  const itemId = str_(p.item_id);
+  const qty = Math.round(num_(p.qty));
+  if (!itemId || !qty) throw new Error('กรุณาเลือกสินค้าและใส่จำนวน');
+  return withLock_(function () {
+    const idx = stockIndex_();
+    const stock = changeStock_(idx, itemId, qty);
+    appendRow_('StockIn', {
+      stockin_id: nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4), datetime: now_(),
+      event_name: str_(p.event_name), item_id: itemId, qty: qty, note: str_(p.note), staff: user.display_name
+    });
+    return { item_id: itemId, stock_qty: stock };
+  });
+}
+
+/* ---------------- Sales ---------------- */
+
+function createSale_(p, user) {
+  const lines = p.lines || [];
+  if (!lines.length) throw new Error('ไม่มีสินค้าในตะกร้า');
+  const method = str_(p.payment_method);
+  if (['cash', 'transfer', 'promptpay'].indexOf(method) < 0) throw new Error('วิธีชำระเงินไม่ถูกต้อง');
+
+  return withLock_(function () {
+    const sales = readTable_('Sales');
+    const clientId = str_(p.client_id);
+    if (clientId) {
+      const dup = sales.filter(function (s) { return str_(s.client_id) === clientId; })[0];
+      if (dup) return { bill: billOf_(dup.bill_id) };
+    }
+    const idx = stockIndex_();
+    const products = {};
+    readTable_('Products').forEach(function (r) { products[str_(r.product_id)] = r; });
+    const packages = {};
+    loadPackages_().forEach(function (k) { packages[k.package_id] = k; });
+
+    const items = [];
+    const deductions = [];
+    let subtotal = 0;
+    let setNo = 0;
+
+    lines.forEach(function (ln) {
+      const qty = Math.round(num_(ln.qty));
+      if (qty <= 0) return;
+      if (ln.type === 'package') {
+        const k = packages[str_(ln.id)];
+        if (!k || !k.active) throw new Error('ไม่พบแพ็กเกจ ' + ln.id);
+        setNo += 1;
+        items.push({ item_id: k.package_id, item_name: k.name, qty: qty, unit_price: k.price, line_total: k.price * qty, package_id: k.package_id, package_set_no: setNo, slot: '' });
+        subtotal += k.price * qty;
+        k.slots.forEach(function (s) {
+          const chosen = str_((ln.selections || {})[s.slot]);
+          if (!chosen || s.items.indexOf(chosen) < 0) throw new Error('เลือกสินค้าช่อง ' + s.slot + ' ของ ' + k.name + ' ไม่ถูกต้อง');
+          const it = idx[chosen];
+          if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
+          items.push({ item_id: chosen, item_name: it.name, qty: qty * s.qty, unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: s.slot });
+          deductions.push([chosen, qty * s.qty]);
+        });
+      } else {
+        const id = str_(ln.id);
+        const it = idx[id];
+        if (!it) throw new Error('ไม่พบสินค้า ' + id);
+        const price = it.sheet === 'Variants' ? it.price : num_(products[id].price);
+        items.push({ item_id: id, item_name: it.name, qty: qty, unit_price: price, line_total: price * qty, package_id: '', package_set_no: '', slot: '' });
+        subtotal += price * qty;
+        deductions.push([id, qty]);
+      }
+    });
+    if (!items.length) throw new Error('ไม่มีสินค้าในตะกร้า');
+
+    const dType = str_(p.discount_type) === 'percent' ? 'percent' : 'baht';
+    const dValue = Math.max(0, num_(p.discount_value));
+    let dAmount = dType === 'percent' ? subtotal * Math.min(dValue, 100) / 100 : dValue;
+    dAmount = Math.min(subtotal, Math.round(dAmount * 100) / 100);
+    const total = Math.round((subtotal - dAmount) * 100) / 100;
+
+    deductions.forEach(function (d) { changeStock_(idx, d[0], -d[1]); });
+
+    const billId = nextId_(sales, 'bill_id', 'B', 4);
+    const bill = {
+      bill_id: billId, datetime: now_(), event_name: str_(p.event_name), subtotal: subtotal,
+      discount_type: dType, discount_value: dValue, discount_amount: dAmount, total: total,
+      payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId
+    };
+    appendRow_('Sales', bill);
+    appendRows_('SaleItems', items.map(function (it, i) { return Object.assign({ bill_id: billId, line_no: i + 1 }, it); }));
+    delete bill.client_id;
+    bill.items = items;
+    return { bill: bill };
+  });
+}
+
+function billOf_(billId) {
+  const s = readTable_('Sales').filter(function (r) { return r.bill_id === billId; })[0];
+  const items = readTable_('SaleItems').filter(function (r) { return r.bill_id === billId; });
+  return Object.assign(cleanSale_(s), { items: items.map(cleanItem_) });
+}
+
+function cleanSale_(r) {
+  return {
+    bill_id: str_(r.bill_id), datetime: str_(r.datetime), event_name: str_(r.event_name), subtotal: num_(r.subtotal),
+    discount_type: str_(r.discount_type), discount_value: num_(r.discount_value), discount_amount: num_(r.discount_amount),
+    total: num_(r.total), payment_method: str_(r.payment_method), note: str_(r.note), staff: str_(r.staff)
+  };
+}
+
+function cleanItem_(r) {
+  return {
+    item_id: str_(r.item_id), item_name: str_(r.item_name), qty: num_(r.qty), unit_price: num_(r.unit_price),
+    line_total: num_(r.line_total), package_id: str_(r.package_id), package_set_no: r.package_set_no === '' ? '' : num_(r.package_set_no), slot: str_(r.slot)
+  };
+}
+
+function todaySales_(p) {
+  const day = str_(p.date) || today_();
+  const bills = readTable_('Sales').filter(function (r) { return str_(r.datetime).indexOf(day) === 0; }).map(cleanSale_);
+  const ids = {};
+  bills.forEach(function (b) { b.items = []; ids[b.bill_id] = b; });
+  readTable_('SaleItems').forEach(function (r) { if (ids[r.bill_id]) ids[r.bill_id].items.push(cleanItem_(r)); });
+  bills.reverse();
+  return { date: day, bills: bills };
+}
+
+/* ---------------- Admin ---------------- */
+
+function getAdminData_() {
+  const data = catalog_(true);
+  data.users = readTable_('Users').map(publicUser_);
+  return data;
+}
+
+function updateUser_(p, admin) {
+  return withLock_(function () {
+    const u = readTable_('Users').filter(function (x) { return x.user_id === str_(p.user_id); })[0];
+    if (!u) throw new Error('ไม่พบผู้ใช้');
+    const patch = {};
+    if (p.role) {
+      if (['admin', 'seller'].indexOf(p.role) < 0) throw new Error('role ไม่ถูกต้อง');
+      if (u.user_id === admin.user_id && p.role !== 'admin') throw new Error('เปลี่ยนสิทธิ์ของตัวเองไม่ได้');
+      patch.role = p.role;
+    }
+    if (p.status) {
+      if (['active', 'pending', 'disabled'].indexOf(p.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
+      if (u.user_id === admin.user_id && p.status !== 'active') throw new Error('ปิดบัญชีตัวเองไม่ได้');
+      patch.status = p.status;
+    }
+    if (p.pin) {
+      if (!/^\d{4,6}$/.test(str_(p.pin))) throw new Error('PIN ต้องเป็นตัวเลข 4–6 หลัก');
+      patch.salt = Utilities.getUuid();
+      patch.pin_hash = hash_(str_(p.pin), patch.salt);
+    }
+    updateRow_('Users', u._row, patch);
+    if (patch.status && patch.status !== 'active') revokeSessions_(u.user_id);
+    return { user: publicUser_(Object.assign({}, u, patch)) };
+  });
+}
+
+function revokeSessions_(userId) {
+  const s = sh_('Sessions');
+  readTable_('Sessions').filter(function (r) { return r.user_id === userId; }).reverse().forEach(function (r) {
+    CacheService.getScriptCache().remove('tok_' + r.token);
+    s.deleteRow(r._row);
+  });
+}
+
+function saveProduct_(p) {
+  const name = str_(p.name);
+  if (!name) throw new Error('กรุณาใส่ชื่อสินค้า');
+  return withLock_(function () {
+    const rows = readTable_('Products');
+    const sku = str_(p.sku);
+    const id = str_(p.product_id);
+    if (sku && rows.some(function (r) { return str_(r.sku) === sku && str_(r.product_id) !== id; })) throw new Error('SKU นี้ถูกใช้แล้ว');
+    const obj = {
+      sku: sku, name: name, category: str_(p.category), subcategory: str_(p.subcategory), unit: str_(p.unit),
+      price: num_(p.price), cost: num_(p.cost), description: str_(p.description), image_url: str_(p.image_url),
+      active: p.active !== false
+    };
+    if (id) {
+      const r = rows.filter(function (x) { return str_(x.product_id) === id; })[0];
+      if (!r) throw new Error('ไม่พบสินค้า');
+      updateRow_('Products', r._row, obj);
+      return { product_id: id };
+    }
+    obj.product_id = nextId_(rows, 'product_id', 'P', 3);
+    obj.has_variants = false;
+    obj.stock_qty = 0;
+    appendRow_('Products', obj);
+    return { product_id: obj.product_id };
+  });
+}
+
+function saveVariant_(p) {
+  return withLock_(function () {
+    const productId = str_(p.product_id);
+    const prod = readTable_('Products').filter(function (x) { return str_(x.product_id) === productId; })[0];
+    if (!prod) throw new Error('ไม่พบสินค้าหลัก');
+    const rows = readTable_('Variants');
+    const id = str_(p.variant_id);
+    const obj = {
+      product_id: productId, sku: str_(p.sku), size: str_(p.size), color: str_(p.color),
+      price: p.price === '' || p.price === null || p.price === undefined ? '' : num_(p.price),
+      cost: p.cost === '' || p.cost === null || p.cost === undefined ? '' : num_(p.cost),
+      image_url: str_(p.image_url), active: p.active !== false
+    };
+    if (!obj.size && !obj.color) throw new Error('กรุณาใส่ไซซ์หรือสี');
+    if (obj.sku && rows.some(function (r) { return str_(r.sku) === obj.sku && str_(r.variant_id) !== id; })) throw new Error('SKU นี้ถูกใช้แล้ว');
+    let vid = id;
+    if (id) {
+      const r = rows.filter(function (x) { return str_(x.variant_id) === id; })[0];
+      if (!r) throw new Error('ไม่พบตัวเลือก');
+      updateRow_('Variants', r._row, obj);
+    } else {
+      vid = nextId_(rows, 'variant_id', 'V', 3);
+      obj.variant_id = vid;
+      obj.stock_qty = 0;
+      appendRow_('Variants', obj);
+    }
+    if (!bool_(prod.has_variants)) updateRow_('Products', prod._row, { has_variants: true });
+    return { variant_id: vid };
+  });
+}
+
+function savePackage_(p) {
+  const name = str_(p.name);
+  if (!name) throw new Error('กรุณาใส่ชื่อแพ็กเกจ');
+  const slots = (p.slots || []).map(function (s) {
+    return { slot: str_(s.slot), qty: Math.max(1, Math.round(num_(s.qty) || 1)), items: (s.items || []).map(str_).filter(String) };
+  });
+  if (!slots.length) throw new Error('แพ็กเกจต้องมีอย่างน้อย 1 ช่อง');
+  slots.forEach(function (s) { if (!s.slot || !s.items.length) throw new Error('ทุกช่องต้องมีชื่อและสินค้าอย่างน้อย 1 รายการ'); });
+  return withLock_(function () {
+    const rows = readTable_('Packages');
+    let id = str_(p.package_id);
+    const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false };
+    if (id) {
+      const r = rows.filter(function (x) { return str_(x.package_id) === id; })[0];
+      if (!r) throw new Error('ไม่พบแพ็กเกจ');
+      updateRow_('Packages', r._row, obj);
+    } else {
+      id = nextId_(rows, 'package_id', 'PK', 3);
+      obj.package_id = id;
+      appendRow_('Packages', obj);
+    }
+    const s = sh_('PackageSlots');
+    readTable_('PackageSlots').filter(function (r) { return str_(r.package_id) === id; }).reverse().forEach(function (r) { s.deleteRow(r._row); });
+    appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(',') }; }));
+    return { package_id: id };
+  });
+}
+
+function saveSettings_(p) {
+  const allowed = Object.keys(DEFAULT_SETTINGS);
+  return withLock_(function () {
+    const rows = readTable_('Settings');
+    Object.keys(p || {}).forEach(function (k) {
+      if (allowed.indexOf(k) < 0) return;
+      const r = rows.filter(function (x) { return x.key === k; })[0];
+      if (r) updateRow_('Settings', r._row, { value: str_(p[k]) });
+      else appendRow_('Settings', { key: k, value: str_(p[k]) });
+    });
+    return { settings: settingsMap_() };
+  });
+}
+
+function imageFolder_() {
+  const it = DriveApp.getFoldersByName(IMAGE_FOLDER);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(IMAGE_FOLDER);
+}
+
+function uploadImage_(p) {
+  const mime = str_(p.mime) || 'image/jpeg';
+  if (!/^image\/(jpeg|png|webp)$/.test(mime)) throw new Error('รองรับเฉพาะไฟล์รูป JPG/PNG/WEBP');
+  const bytes = Utilities.base64Decode(str_(p.data));
+  if (bytes.length > 5 * 1024 * 1024) throw new Error('รูปใหญ่เกิน 5MB');
+  const blob = Utilities.newBlob(bytes, mime, (str_(p.name) || 'image') + '-' + Date.now());
+  const file = imageFolder_().createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return { url: 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w600', file_id: file.getId() };
+}
+
+/** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
+function setup() {
+  CacheService.getScriptCache().remove('setup_ok_v1');
+  ensureSetup_();
+  imageFolder_();
+  Logger.log('Setup done. Users so far: ' + readTable_('Users').length);
+}
