@@ -396,7 +396,7 @@ function editPackage(id, copy) {
       <button class="btn line" id="addSlot">+ เพิ่มช่อง ${letter(k.slots.length)}</button>
       </div>
       <br><button class="btn" id="kSave">บันทึก</button>
-      ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button><br><br><button class="btn danger" id="kDel">🗑 ลบแพ็กเกจนี้</button>' : ''}
+      ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button>' : ''}
       <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
     $('addSlot').onclick = () => { keep(); k.slots.push({ slot: letter(k.slots.length), qty: 1, lines: 1, items: [] }); render(); el.querySelectorAll('.slot')[k.slots.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' }); };
@@ -408,7 +408,8 @@ function editPackage(id, copy) {
     el.querySelectorAll('[data-ln]').forEach(inp => inp.oninput = () => { const i = inp.dataset.ln; $('sh' + i).textContent = `หน้าขายจะมี ${Math.max(1, +$('sn' + i).value || 1)} บรรทัดให้เลือกสินค้า + ใส่จำนวน รวมกันต้องได้ ${+$('sq' + i).value || 1} ชิ้น`; });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
     el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
-    if (id) $('kDel').onclick = async () => {
+    // ปุ่มลบแพ็กเกจซ่อนไว้ก่อนตามที่ผู้ใช้ขอ (โค้ดยังอยู่ เปิดใหม่ได้โดยใส่ปุ่ม id="kDel" กลับ)
+    if (id && $('kDel')) $('kDel').onclick = async () => {
       const ok = await confirmBox('ลบแพ็กเกจ "' + src.name + '"?', 'ยอดขายแพ็กเกจนี้ที่ขายไปแล้วยังอยู่ในประวัติ แต่ลบแล้วกู้คืนไม่ได้\nถ้าแค่อยากหยุดขายชั่วคราว ให้เอาติ๊ก "เปิดขาย" ออกแทน', 'ลบแพ็กเกจ', true);
       if (!ok) return;
       const b = $('kDel'); busy(b, true);
