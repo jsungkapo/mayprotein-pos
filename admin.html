@@ -304,7 +304,7 @@ function renderProducts() {
     const vs = varsOf(p.product_id);
     const st = p.has_variants ? vs.reduce((a, v) => a + v.stock_qty, 0) : p.stock_qty;
     return `<div class="it ${p.active ? '' : 'off'}" onclick="editProduct('${p.product_id}')"><div class="thumb">${p.image_url ? `<img src="${esc(p.image_url)}" loading="lazy" onerror="POS.imgFix(this)">` : '📦'}</div>
-      <div class="t"><b>${esc(p.name)}${p.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${esc(p.sku || '-')} · ${esc([p.category, p.subcategory].filter(Boolean).join(' › '))}${p.has_variants ? ` · ${vs.length} ตัวเลือก` : ''}</small></div>
+      <div class="t"><b>${esc(p.name)}${p.active ? '' : `<span class="tag ${st <= 0 ? 'bad' : ''}">${st <= 0 ? 'หมด · ปิดขาย' : 'ปิดขาย'}</span>`}</b><small>${esc(p.sku || '-')} · ${esc([p.category, p.subcategory].filter(Boolean).join(' › '))}${p.has_variants ? ` · ${vs.length} ตัวเลือก` : ''}</small></div>
       <div class="r"><b>${money(p.price)}฿</b><br><small style="color:${st <= 0 ? 'var(--bad)' : 'var(--muted)'}">สต็อก ${st}</small></div></div>`;
   }).join('') || '<div class="empty">ยังไม่มีสินค้า</div>';
 }
@@ -526,8 +526,8 @@ const saveDraft = () => { try { localStorage.setItem(COUNT_KEY, JSON.stringify(d
 function countItems() {
   const a = [];
   D.products.forEach(p => {
-    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: p.name + ' ' + vLabel(v), sku: v.sku, cat: p.category || 'อื่นๆ', stock: v.stock_qty, unit: p.unit }));
-    else a.push({ id: p.product_id, name: p.name, sku: p.sku, cat: p.category || 'อื่นๆ', stock: p.stock_qty, unit: p.unit });
+    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: p.name + ' ' + vLabel(v), sku: v.sku, cat: p.category || 'อื่นๆ', stock: v.stock_qty, unit: p.unit, off: !p.active || !v.active }));
+    else a.push({ id: p.product_id, name: p.name, sku: p.sku, cat: p.category || 'อื่นๆ', stock: p.stock_qty, unit: p.unit, off: !p.active });
   });
   return a;
 }
@@ -603,7 +603,7 @@ function renderStockTab() {
   let html = '', last = null;
   a.filter(x => !q || (x.name + ' ' + (x.sku || '')).toLowerCase().includes(q)).forEach(x => {
     if (x.cat !== last) { html += `<tr><td colspan="2" class="grp" style="padding-top:10px">${esc(x.cat)}</td></tr>`; last = x.cat; }
-    html += `<tr data-id="${esc(x.id)}" style="cursor:pointer${x.stock <= 0 ? ';color:var(--bad)' : ''}"><td>${esc(x.name)}</td><td class="n"><b>${x.stock}</b></td></tr>`;
+    html += `<tr data-id="${esc(x.id)}" style="cursor:pointer${x.stock <= 0 ? ';color:var(--bad)' : ''}"><td>${esc(x.name)}${x.off ? ' <span class="tag">ปิดขาย</span>' : ''}</td><td class="n"><b>${x.stock}</b></td></tr>`;
   });
   $('stTable').innerHTML = html || '<tr><td class="empty">ยังไม่มีสินค้า</td></tr>';
   $('stTable').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => {
@@ -624,7 +624,8 @@ $('stBtn').onclick = async () => {
     const p = P(id); if (p) p.stock_qty = r.stock_qty; const v = V(id); if (v) v.stock_qty = r.stock_qty;
     try { localStorage.setItem(ADMIN_CACHE, JSON.stringify(D)); } catch (e) {}
     $('stNote').value = ''; renderStockTab(); renderProducts();
-    POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}`);
+    const off = countItems().find(x => x.id === id);
+    POS.toast(`${itemName(id)} คงเหลือ ${r.stock_qty}` + (r.auto_hidden && r.auto_hidden.length ? ' · หมด ปิดขายอัตโนมัติ' : off && off.off ? ' · ยังปิดขายอยู่ เปิดได้ที่แท็บสินค้า' : ''));
   } catch (e) { POS.toast(e.message, true); }
   busy(b, false);
 };
@@ -685,7 +686,8 @@ $('rqSave').onclick = async () => {
       doc_date: $('rqDate').value, department: $('rqDept').value.trim(), activity: $('rqAct').value.trim(), requester: $('rqBy').value.trim(), note: $('rqNote').value.trim(),
       items: lines.map(l => ({ item_id: l.item_id, name: l.item_id ? '' : l.name.trim(), unit: '', qty_req: l.qty_req === '' ? '' : +l.qty_req, qty_recv: l.qty_recv === '' ? '' : +l.qty_recv, note: l.note.trim() }))
     });
-    POS.toast('บันทึกใบเบิก ' + r.requisition.req_id + ' แล้ว');
+    const offNames = lines.filter(l => l.item_id && (countItems().find(x => x.id === l.item_id) || {}).off).map(l => itemName(l.item_id));
+    POS.toast('บันทึกใบเบิก ' + r.requisition.req_id + ' แล้ว' + (offNames.length ? ' · สินค้าที่ยังปิดขายอยู่: ' + offNames.join(', ') + ' (เปิดได้ที่แท็บสินค้า)' : ''), !!offNames.length);
     rq = null; $('rqNote').value = ''; busy(b, false);
     REQS.unshift(r.requisition); renderReqs();
     openDoc(r.requisition);

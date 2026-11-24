@@ -479,6 +479,7 @@ async function pay() {
     });
     const b = r.bill;
     if (Math.abs(b.total - net) > 0.01) POS.toast('ยอดสุทธิจากเซิร์ฟเวอร์: ' + money(b.total) + ' บาท');
+    if (r.auto_hidden && r.auto_hidden.length) setTimeout(() => POS.toast('สินค้าหมด ปิดขายอัตโนมัติ: ' + r.auto_hidden.join(', '), true), 600);
     cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
     $('disc').value = 0; $('note').value = ''; clientId = null; slip = null;
     $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
