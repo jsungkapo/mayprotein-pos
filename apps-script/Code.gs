@@ -421,16 +421,16 @@ function catalog_(admin) {
 
 function cachedCatalog_(admin) {
   const cache = CacheService.getScriptCache();
-  const key = admin ? 'cat_admin' : 'cat_user';
+  const key = admin ? 'cat_admin_v2' : 'cat_user_v2';
   const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
   const data = catalog_(admin);
-  try { cache.put(key, JSON.stringify(data), 21600); } catch (e) { /* ใหญ่เกิน 100KB ก็อ่านจากชีตทุกครั้ง */ }
+  try { cache.put(key, JSON.stringify(data), 600); } catch (e) { /* ใหญ่เกิน 100KB ก็อ่านจากชีตทุกครั้ง */ }
   return data;
 }
 
 function catalogChanged_() {
-  CacheService.getScriptCache().removeAll(['cat_admin', 'cat_user']);
+  CacheService.getScriptCache().removeAll(['cat_admin_v2', 'cat_user_v2']);
 }
 
 function getCatalog_() { return cachedCatalog_(false); }
