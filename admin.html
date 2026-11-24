@@ -36,6 +36,8 @@
 .slot{background:#fafafa;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
 .slot .hd{display:flex;gap:8px;align-items:center}
 .slot .hd input{width:70px;flex:none}
+.slot .slotname{font-weight:800;font-size:16px;color:var(--pink)}
+#addSlot{margin-top:2px}
 .picks{max-height:220px;overflow-y:auto;margin-top:8px;background:#fff;border:1px solid var(--line);border-radius:8px}
 .picks label{display:flex;align-items:center;gap:8px;margin:0;padding:8px 10px;border-bottom:1px solid #f3f3f3;color:var(--text);font-size:14px}
 .picks input{width:18px;height:18px;flex:none}
@@ -363,6 +365,7 @@ function renderPackages() {
   $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}">` : '🎁'}</div>
     <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${k.slots.map(s => esc(s.slot) + ': ' + s.items.length + ' ตัวเลือก').join(' · ')}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
 }
+const letter = i => i < 26 ? String.fromCharCode(65 + i) : 'S' + (i + 1);
 /** copy = { from: package_id, data: ค่าที่คัดลอกมา } */
 function editPackage(id, copy) {
   const src = id ? D.packages.find(k => k.package_id === id) : copy ? copy.data : null;
@@ -372,7 +375,7 @@ function editPackage(id, copy) {
   const filters = {};
   const keep = () => {
     k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked;
-    k.slots.forEach((s, i) => { s.slot = el.querySelector(`#sl${i}`).value.trim(); s.qty = +el.querySelector(`#sq${i}`).value || 1; s.lines = Math.max(1, Math.min(20, +el.querySelector(`#sn${i}`).value || 1)); });
+    k.slots.forEach((s, i) => { s.slot = letter(i); s.qty = +el.querySelector(`#sq${i}`).value || 1; s.lines = Math.max(1, Math.min(20, +el.querySelector(`#sn${i}`).value || 1)); });
   };
   const render = () => {
     el.innerHTML = `<h3>${id ? 'แก้ไขแพ็กเกจ' : copy ? 'คัดลอกแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
@@ -382,21 +385,26 @@ function editPackage(id, copy) {
       <label>ราคาเซต (บาท)</label><input id="kPrice" type="number" inputmode="decimal" value="${k.price}">
       <label>คำอธิบาย</label><input id="kDesc" value="${esc(k.description)}" placeholder="เช่น ซื้อ A + B รับ C">
       <label class="chk"><input type="checkbox" id="kAct" ${k.active ? 'checked' : ''}> เปิดขาย</label>
-      <div class="sec"><h4><span>ช่องสินค้า</span><button class="btn sm line" id="addSlot">+ เพิ่มช่อง</button></h4>
+      <div class="sec"><h4><span>ช่องสินค้า</span></h4>
       <div class="hint" style="margin-bottom:8px">แต่ละช่องเลือกได้ว่ามีสินค้าอะไรให้ลูกค้าเลือกบ้าง ตั้งจำนวนชิ้นรวมของช่อง และจำนวนบรรทัดที่ให้เลือกผสมได้ (เช่น 2 ชิ้น 2 บรรทัด = กล้วย 1 + โกโก้ 1)</div>
-      ${k.slots.map((s, i) => `<div class="slot"><div class="hd"><span>ช่อง</span><input id="sl${i}" value="${esc(s.slot)}"><span style="flex:1"></span><a data-del="${i}">ลบช่อง</a></div>
+      ${k.slots.map((s, i) => `<div class="slot"><div class="hd"><span class="slotname">ช่อง ${letter(i)}</span><span style="flex:1"></span>${k.slots.length > 1 ? `<a data-del="${i}">ลบช่อง ${letter(i)}</a>` : ''}</div>
         <div class="hd" style="margin-top:8px"><span>ชิ้นรวม</span><input id="sq${i}" data-ln="${i}" type="number" inputmode="numeric" value="${s.qty}" style="width:60px;flex:none"><span>บรรทัด</span><input id="sn${i}" data-ln="${i}" type="number" inputmode="numeric" value="${s.lines || 1}" style="width:60px;flex:none"></div>
         <div class="hint" id="sh${i}">หน้าขายจะมี ${s.lines || 1} บรรทัดให้เลือกสินค้า + ใส่จำนวน รวมกันต้องได้ ${s.qty} ชิ้น</div>
         <input data-filter="${i}" placeholder="🔍 กรองสินค้า" style="margin-top:8px" value="${esc(filters[i] || '')}">
         <div class="picks">${all.filter(x => !filters[i] || x.name.toLowerCase().includes(filters[i].toLowerCase()) || s.items.includes(x.id)).map(x => `<label><input type="checkbox" data-slot="${i}" value="${esc(x.id)}" ${s.items.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
         <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
+      <button class="btn line" id="addSlot">+ เพิ่มช่อง ${letter(k.slots.length)}</button>
       </div>
       <br><button class="btn" id="kSave">บันทึก</button>
       ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button><br><br><button class="btn danger" id="kDel">🗑 ลบแพ็กเกจนี้</button>' : ''}
       <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
-    $('addSlot').onclick = () => { keep(); const used = k.slots.map(s => s.slot); let c = 65; while (used.includes(String.fromCharCode(c))) c++; k.slots.push({ slot: String.fromCharCode(c), qty: 1, lines: 1, items: [] }); render(); };
-    el.querySelectorAll('[data-del]').forEach(a => a.onclick = () => { keep(); k.slots.splice(+a.dataset.del, 1); render(); });
+    $('addSlot').onclick = () => { keep(); k.slots.push({ slot: letter(k.slots.length), qty: 1, lines: 1, items: [] }); render(); el.querySelectorAll('.slot')[k.slots.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    el.querySelectorAll('[data-del]').forEach(a => a.onclick = async () => {
+      const i = +a.dataset.del;
+      if (k.slots[i].items.length && !await confirmBox(`ลบช่อง ${letter(i)}?`, 'ช่องถัดไปจะเลื่อนขึ้นมาแทน (เช่น C จะกลายเป็น ' + letter(i) + ')', 'ลบช่อง', true)) return;
+      keep(); k.slots.splice(i, 1); k.slots.forEach((s, j) => s.slot = letter(j)); render();
+    });
     el.querySelectorAll('[data-ln]').forEach(inp => inp.oninput = () => { const i = inp.dataset.ln; $('sh' + i).textContent = `หน้าขายจะมี ${Math.max(1, +$('sn' + i).value || 1)} บรรทัดให้เลือกสินค้า + ใส่จำนวน รวมกันต้องได้ ${+$('sq' + i).value || 1} ชิ้น`; });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
     el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
