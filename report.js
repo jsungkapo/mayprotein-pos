@@ -8,7 +8,8 @@
   function aggregate(bills) {
     const blank = () => ({ bills: 0, cash: 0, transfer: 0, discount: 0, subtotal: 0, net: 0, items: {}, packages: {} });
     const all = blank(), days = {};
-    bills.forEach(b => {
+    all.cancelled = bills.filter(b => b.status === 'cancelled').length;
+    bills.filter(b => b.status !== 'cancelled').forEach(b => {
       const d = String(b.datetime).slice(0, 10);
       const day = days[d] || (days[d] = Object.assign(blank(), { date: d }));
       const m = normMethod(b.payment_method);
@@ -41,7 +42,7 @@
       P.text(opt.shop || 'MayProtein', L, 14, 10, { color: '#888' });
       P.text('รายงานสรุปยอดขาย', 105, 22, 18, { align: 'center', bold: true });
       P.text(opt.title ? 'งาน: ' + opt.title : '', 105, 30, 14, { align: 'center', color: '#0b3d91', bold: true });
-      P.text('ช่วงวันที่ ' + period, 105, 37, 12, { align: 'center' });
+      P.text('ช่วงวันที่ ' + period + (g.cancelled ? ` · ไม่รวมบิลที่ยกเลิก ${g.cancelled} บิล` : ''), 105, 37, 12, { align: 'center' });
       P.line(L, 41, R, 41, 0.3);
       y = 49;
     };

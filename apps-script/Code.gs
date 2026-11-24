@@ -18,7 +18,7 @@ const SCHEMA = {
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
-  Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url'],
+  Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url', 'status', 'cancelled_at', 'cancelled_by', 'cancel_reason'],
   SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
   Settings: ['key', 'value'],
   Users: ['user_id', 'username', 'display_name', 'pin_hash', 'salt', 'role', 'status', 'created_at'],
@@ -63,9 +63,9 @@ function json_(o) {
 }
 
 const PUBLIC_ACTIONS = { register: register_, login: login_ };
-const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_, todaySales: todaySales_, cancelBill: cancelBill_ };
 const ADMIN_ACTIONS = {
-  todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
+  getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
   saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_, addStock: addStock_,
@@ -106,7 +106,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v7')) return;
+  if (cache.get('setup_ok_v8')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -129,7 +129,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v7', '1', 21600);
+  cache.put('setup_ok_v8', '1', 21600);
 }
 
 function headers_(name) {
@@ -643,7 +643,8 @@ function cleanSale_(r) {
     bill_id: str_(r.bill_id), datetime: str_(r.datetime), event_name: str_(r.event_name), subtotal: num_(r.subtotal),
     discount_type: str_(r.discount_type), discount_value: num_(r.discount_value), discount_amount: num_(r.discount_amount),
     total: num_(r.total), payment_method: str_(r.payment_method), note: str_(r.note), staff: str_(r.staff),
-    slip_url: str_(r.slip_url)
+    slip_url: str_(r.slip_url), status: str_(r.status) || 'paid', cancelled_at: str_(r.cancelled_at),
+    cancelled_by: str_(r.cancelled_by), cancel_reason: str_(r.cancel_reason)
   };
 }
 
@@ -655,9 +656,11 @@ function cleanItem_(r) {
 }
 
 /** บิลตามช่วงวันที่ (from–to รวมทั้งสองวัน รูปแบบ yyyy-MM-dd) ถ้าไม่ระบุ = วันนี้ */
-function todaySales_(p) {
-  const from = str_(p.from) || str_(p.date) || today_();
-  const to = str_(p.to) || from;
+function todaySales_(p, user) {
+  // พนักงานขายดูได้เฉพาะบิลของวันนี้ (ไว้ยกเลิกบิล) แอดมินเลือกช่วงวันที่ได้
+  const admin = user && user.role === 'admin';
+  const from = admin ? (str_(p.from) || str_(p.date) || today_()) : today_();
+  const to = admin ? (str_(p.to) || from) : from;
   if (to < from) throw new Error('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม');
   const day = from;
   const bills = readTable_('Sales').filter(function (r) { const d = str_(r.datetime).slice(0, 10); return d >= from && d <= to; }).map(cleanSale_);
@@ -666,6 +669,47 @@ function todaySales_(p) {
   readTable_('SaleItems').forEach(function (r) { if (ids[r.bill_id]) ids[r.bill_id].items.push(cleanItem_(r)); });
   bills.reverse();
   return { date: day, from: from, to: to, bills: bills };
+}
+
+/**
+ * ยกเลิกบิล: ต้องพิมพ์ชื่อผู้ใช้ของตัวเองยืนยัน + ใส่เหตุผล
+ * คืนสินค้าเข้าสต็อกทุกรายการ (รวมสินค้าในแพ็กเกจ) และบันทึกสถานะ/เหตุผลไว้ในบิล
+ */
+function cancelBill_(p, user) {
+  const billId = str_(p.bill_id);
+  const reason = str_(p.reason);
+  if (str_(p.username).toLowerCase() !== str_(user.username).toLowerCase()) throw new Error('ชื่อผู้ใช้ไม่ตรงกับบัญชีที่เข้าสู่ระบบอยู่');
+  if (!reason) throw new Error('กรุณาใส่สาเหตุที่ยกเลิก');
+  return withLock_(function () {
+    const bill = readTable_('Sales').filter(function (r) { return str_(r.bill_id) === billId; })[0];
+    if (!bill) throw new Error('ไม่พบบิล ' + billId);
+    if (str_(bill.status) === 'cancelled') throw new Error('บิลนี้ถูกยกเลิกไปแล้ว');
+    if (user.role !== 'admin' && str_(bill.datetime).slice(0, 10) !== today_()) throw new Error('พนักงานขายยกเลิกได้เฉพาะบิลของวันนี้');
+    const items = readTable_('SaleItems').filter(function (r) { return str_(r.bill_id) === billId; });
+    const idx = stockIndex_();
+    const back = {};
+    items.forEach(function (r) {
+      if (str_(r.package_id) && !str_(r.slot)) return; // แถวหัวแพ็กเกจ ไม่ใช่สินค้าจริง
+      const id = str_(r.item_id);
+      if (!idx[id] || idx[id].has_variants) return;     // สินค้าถูกลบไปแล้ว
+      back[id] = (back[id] || 0) + num_(r.qty);
+    });
+    const ids = Object.keys(back);
+    ids.forEach(function (id) { changeStock_(idx, id, back[id]); });
+    if (ids.length) {
+      flushStock_(idx, user);
+      const base = Number(nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4).slice(1));
+      const when = now_();
+      appendRows_('StockIn', ids.map(function (id, i) {
+        return { stockin_id: 'S' + pad_(base + i, 4), datetime: when, event_name: str_(bill.event_name), item_id: id, qty: back[id], note: 'คืนสต็อกจากยกเลิกบิล ' + billId + ' · ' + reason, staff: user.display_name };
+      }));
+    }
+    const patch = { status: 'cancelled', cancelled_at: now_(), cancelled_by: user.display_name, cancel_reason: reason };
+    updateRow_('Sales', bill._row, patch);
+    log_(user, 'ยกเลิกบิล', 'บิล', billId, '', 'สาเหตุ: ' + reason + ' · ยอด ' + num_(bill.total) + ' ฿ · คืนสต็อก ' +
+      (ids.map(function (id) { return idx[id].name + ' +' + back[id]; }).join(', ') || '-'));
+    return { bill: Object.assign(cleanSale_(Object.assign({}, bill, patch)), { items: items.map(cleanItem_) }) };
+  });
 }
 
 /** ส่งรูปสลิปของบิลกลับมาเป็น base64 ให้แอดมินดูในแอปได้ (ไฟล์ใน Drive ไม่ได้แชร์สาธารณะ) */
@@ -1083,7 +1127,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v7');
+  CacheService.getScriptCache().remove('setup_ok_v8');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

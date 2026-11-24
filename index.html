@@ -51,6 +51,8 @@ main{flex:1;overflow-y:auto;min-height:0}
 .slip .t{flex:1;font-size:13px;color:#555}
 .slip .t b{display:block;color:var(--text);font-size:14px}
 .slip .acts{display:flex;flex-direction:column;gap:6px}
+.cxl{margin-top:8px;padding:8px 10px;border-radius:8px;background:#fde4e4;color:var(--bad);font-size:13px;line-height:1.5}
+.bill.cancelled .h b.amt{text-decoration:line-through;color:#aaa}
 .sliptag{border:1px solid var(--pink);background:var(--pink-soft);color:var(--pink);font-weight:700;padding:3px 9px}
 #mSlip{z-index:45}
 #mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
@@ -124,7 +126,7 @@ tr.low td{color:var(--bad)}
 
   <div class="page" id="p-bills">
     <div class="box" style="display:flex;justify-content:space-between;align-items:center">
-      <span>บิลวันนี้ <b id="bCnt">0</b> บิล · รวม <b id="bSum" style="color:var(--pink)">0</b> ฿</span>
+      <span>บิลวันนี้ <b id="bCnt">0</b> บิล<span id="bSumWrap"> · รวม <b id="bSum" style="color:var(--pink)">0</b> ฿</span></span>
       <button class="btn sm line" onclick="loadToday(true)">↻</button>
     </div>
     <div id="billList"></div>
@@ -190,6 +192,14 @@ tr.low td{color:var(--bad)}
   <div class="hint" id="askHint" style="font-size:12px;color:#888;margin-top:6px"></div>
   <br><button class="btn" id="askOk">สร้าง PDF</button><br><br><button class="btn g" onclick="closeM('mAsk')">ยกเลิก</button>
 </div></div>
+<div class="modal" id="mCancel"><div class="sheet">
+  <h3 id="cxTitle" style="color:var(--bad)">ยกเลิกบิล?</h3>
+  <div id="cxInfo" style="font-size:14px;line-height:1.6;background:#fff5f5;border-radius:10px;padding:10px"></div>
+  <label>ยืนยันตัวตน: ชื่อผู้ใช้ของคุณ *</label><input id="cxUser" autocapitalize="none" autocorrect="off" autocomplete="off">
+  <label>สาเหตุที่ยกเลิก *</label><textarea id="cxReason" rows="2" placeholder="เช่น ลูกค้าขอเปลี่ยนรส"></textarea>
+  <div class="chips" style="margin-top:8px"><div class="chip" onclick="$('cxReason').value='ลูกค้าขอเปลี่ยนสินค้า'">ลูกค้าขอเปลี่ยนสินค้า</div><div class="chip" onclick="$('cxReason').value='คีย์ผิด'">คีย์ผิด</div><div class="chip" onclick="$('cxReason').value='ลูกค้ายกเลิกการซื้อ'">ลูกค้ายกเลิกการซื้อ</div><div class="chip" onclick="$('cxReason').value='ชำระเงินไม่สำเร็จ'">ชำระเงินไม่สำเร็จ</div></div>
+  <br><button class="btn" id="cxOk" style="background:var(--bad)">ยืนยันยกเลิกบิล</button><br><br><button class="btn g" onclick="closeM('mCancel')">ไม่ยกเลิก</button>
+</div></div>
 <div class="modal" id="mSlip"><div class="sheet" style="text-align:center">
   <h3 id="slipTitle">รูปสลิป</h3>
   <div id="slipBody"></div>
@@ -224,7 +234,7 @@ window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u
 
 function boot() {
   $('whoName').textContent = me.display_name;
-  const tabs = [['sell', '🛒 ขาย'], ...(POS.isAdmin() ? [['bills', '🧾 รายการขาย']] : []), ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
+  const tabs = [['sell', '🛒 ขาย'], ['bills', POS.isAdmin() ? '🧾 รายการขาย' : '🧾 บิลวันนี้'], ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
   $('tabs').innerHTML = tabs.map(([k, l], i) => `<button data-t="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('');
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
   if (tabs.length === 1) $('tabs').style.display = 'none';
@@ -501,20 +511,50 @@ function receiptHtml(b) {
   <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
   <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
   ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}
+  ${b.status === 'cancelled' ? `<div class="cxl">❌ ยกเลิกแล้ว โดย ${esc(b.cancelled_by)} · ${esc(String(b.cancelled_at).slice(11, 16))} น.<br>สาเหตุ: ${esc(b.cancel_reason)}<br><small>คืนสินค้าเข้าสต็อกแล้ว</small></div>` : ''}
   ${b.slip_url ? `<div class="r">${POS.isAdmin() ? `<button class="btn sm line" style="margin-top:6px" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูรูปสลิป</button>` : '<small>📎 เก็บรูปสลิปแล้ว</small>'}</div>` : ''}</div>`;
 }
 
-/* ---------- today bills (admin) ---------- */
+/* ---------- today bills (แอดมินและพนักงานขาย — ยกเลิกบิลได้) ---------- */
 async function loadToday(force) {
-  if (!POS.isAdmin()) return;
   if (!today.bills.length || force) $('billList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
   try { today = await POS.call('todaySales'); renderBills(); }
   catch (e) { POS.toast(e.message, true); }
 }
 function renderBills() {
   const bs = today.bills;
-  $('bCnt').textContent = bs.length; $('bSum').textContent = money(bs.reduce((a, b) => a + b.total, 0));
-  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+  const live = bs.filter(b => b.status !== 'cancelled');
+  $('bCnt').textContent = live.length + (live.length !== bs.length ? ` (ยกเลิก ${bs.length - live.length})` : '');
+  $('bSum').textContent = money(live.reduce((a, b) => a + b.total, 0));
+  $('bSumWrap').style.display = POS.isAdmin() ? '' : 'none';
+  $('billList').innerHTML = bs.map(b => `<div class="bill ${b.status === 'cancelled' ? 'cancelled' : ''}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b>${b.status === 'cancelled' ? '<span class="tag bad">ยกเลิก</span>' : ''}<span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b class="amt">${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}${b.status === 'cancelled' ? '' : `<button class="btn sm danger" style="margin-top:4px" onclick="event.stopPropagation();openCancel('${esc(b.bill_id)}')">ยกเลิกบิลนี้</button>`}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+}
+
+/* ---------- ยกเลิกบิล ---------- */
+function openCancel(billId) {
+  const b = today.bills.find(x => x.bill_id === billId);
+  if (!b) return;
+  $('cxTitle').textContent = 'ยกเลิกบิล ' + billId + '?';
+  $('cxInfo').innerHTML = `ยอด <b>${money(b.total)} ฿</b> (${MLABEL[b.payment_method] || ''}) · ${esc(b.datetime.slice(11, 16))} น.<br>สินค้าในบิลนี้จะถูก <b>คืนเข้าสต็อก</b> และยกเลิกแล้วแก้คืนไม่ได้${b.payment_method !== 'cash' ? '<br>⚠️ บิลนี้รับเงินโอน อย่าลืมคืนเงินลูกค้าด้วย' : ''}`;
+  $('cxUser').value = ''; $('cxReason').value = '';
+  $('cxUser').placeholder = 'พิมพ์ชื่อผู้ใช้ของคุณ (' + me.username + ')';
+  $('cxOk').onclick = () => doCancel(billId);
+  $('mCancel').classList.add('on');
+}
+async function doCancel(billId) {
+  const username = $('cxUser').value.trim().toLowerCase(), reason = $('cxReason').value.trim();
+  if (username !== String(me.username).toLowerCase()) return POS.toast('ชื่อผู้ใช้ไม่ตรงกับบัญชีที่เข้าสู่ระบบอยู่', true);
+  if (!reason) return POS.toast('กรุณาใส่สาเหตุที่ยกเลิก', true);
+  const b = $('cxOk'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังยกเลิก';
+  try {
+    const r = await POS.call('cancelBill', { bill_id: billId, username, reason });
+    const i = today.bills.findIndex(x => x.bill_id === billId);
+    if (i >= 0) today.bills[i] = r.bill;
+    closeM('mCancel'); renderBills();
+    POS.toast('ยกเลิกบิล ' + billId + ' แล้ว · คืนสินค้าเข้าสต็อกแล้ว');
+    loadCatalog();
+  } catch (e) { POS.toast(e.message, true); }
+  b.disabled = false; b.textContent = 'ยืนยันยกเลิกบิล';
 }
 
 /* ---------- slip viewer ---------- */
@@ -561,7 +601,7 @@ function renderSum() {
   const g = SalesReport.aggregate(sum.bills);
   $('sumBody').style.display = 'block';
   $('kTotal').textContent = money(g.net) + ' ฿';
-  $('kRange').textContent = sum.from === sum.to ? PdfKit.thaiDate(sum.from) : `${PdfKit.thaiDate(sum.from)} – ${PdfKit.thaiDate(sum.to)}`;
+  $('kRange').textContent = (sum.from === sum.to ? PdfKit.thaiDate(sum.from) : `${PdfKit.thaiDate(sum.from)} – ${PdfKit.thaiDate(sum.to)}`) + (g.cancelled ? ` · ไม่รวมบิลที่ยกเลิก ${g.cancelled} บิล` : '');
   $('kBills').textContent = g.bills; $('kCash').textContent = money(g.cash); $('kTr').textContent = money(g.transfer); $('kDisc').textContent = money(g.discount);
   $('dayTable').innerHTML = '<tr><th>วันที่</th><th class="n">บิล</th><th class="n">เงินสด</th><th class="n">โอน</th><th class="n">สุทธิ</th></tr>' +
     (g.days.map(d => `<tr><td>${esc(PdfKit.thaiDate(d.date))}</td><td class="n">${d.bills}</td><td class="n">${money(d.cash)}</td><td class="n">${money(d.transfer)}</td><td class="n"><b>${money(d.net)}</b></td></tr>`).join('') || '<tr><td colspan="5" class="empty">ไม่มีการขายในช่วงนี้</td></tr>') +
@@ -602,8 +642,8 @@ function downloadCsv() {
   const out = [['สรุปยอดขาย', sum.from, sum.to], ['ยอดขายสุทธิ', g.net], ['จำนวนบิล', g.bills], ['เงินสด', g.cash], ['โอน', g.transfer], ['ส่วนลดรวม', g.discount], [],
     ['วันที่', 'บิล', 'เงินสด', 'โอน', 'ส่วนลด', 'สุทธิ'], ...g.days.map(d => [d.date, d.bills, d.cash, d.transfer, d.discount, d.net]), [],
     ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.packages), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.items), [],
-    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note', 'slip_url']];
-  sum.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, SalesReport.normMethod(b.payment_method), i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url])));
+    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note', 'slip_url', 'status', 'cancel_reason']];
+  sum.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, SalesReport.normMethod(b.payment_method), i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url, n ? '' : (b.status === 'cancelled' ? 'ยกเลิก' : ''), n ? '' : b.cancel_reason])));
   const csv = '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

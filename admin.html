@@ -739,7 +739,7 @@ async function viewSlip(billId) {
 
 /* ---------- activity log ---------- */
 let LOGS = [];
-const ACT_CLASS = { 'เพิ่ม': 'add', 'สมัคร': 'add', 'ลบ': 'del', 'แก้ไข': 'edit', 'ขาย': 'sale', 'เพิ่มสต็อก': 'stock', 'ลดสต็อก': 'stock', 'นับสต็อก': 'stock' };
+const ACT_CLASS = { 'ยกเลิกบิล': 'del', 'ปิดขายอัตโนมัติ': 'del', 'เบิกสินค้า': 'stock', 'เพิ่ม': 'add', 'สมัคร': 'add', 'ลบ': 'del', 'แก้ไข': 'edit', 'ขาย': 'sale', 'เพิ่มสต็อก': 'stock', 'ลดสต็อก': 'stock', 'นับสต็อก': 'stock' };
 async function loadLogs() {
   if (!LOGS.length) $('logList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
   try { const r = await POS.call('getLogs', { limit: 500 }); LOGS = r.logs; renderLogs(); }
