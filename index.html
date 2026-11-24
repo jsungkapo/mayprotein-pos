@@ -229,7 +229,7 @@ function boot() {
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
   if (tabs.length === 1) $('tabs').style.display = 'none';
   $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
-    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a>' : '') + '<a onclick="POS.logout()">ออกจากระบบ</a>';
+    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="POS.logout()">ออกจากระบบ</a>';
   $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
   document.addEventListener('click', () => $('menu').classList.remove('on'));
   $('q').oninput = renderGrid;

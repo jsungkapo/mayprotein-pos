@@ -240,6 +240,19 @@
       return data;
     },
 
+    /** ให้เซิร์ฟเวอร์ดึงโค้ดล่าสุดจาก GitHub ทันที แล้วโหลดหน้าเว็บใหม่ (ไม่ต้องจำว่าต้องเติม ?refresh=1) */
+    async updateSystem(btn) {
+      const url = POS.apiUrl();
+      if (!url) return POS.toast('ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์', true);
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin dark"></span> กำลังอัปเดต'; }
+      let ok = false;
+      try { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'refresh=1&t=' + Date.now()); const j = await r.json(); ok = !!(j && j.refreshed); }
+      catch (e) { try { await fetch(url + '?refresh=1&t=' + Date.now(), { mode: 'no-cors' }); ok = true; } catch (e2) {} }
+      try { const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : []; await Promise.all(regs.map(r => r.update())); } catch (e) {}
+      POS.toast(ok ? 'อัปเดตระบบเป็นเวอร์ชันล่าสุดแล้ว' : 'อัปเดตหน้าเว็บแล้ว (เซิร์ฟเวอร์จะอัปเดตเองภายใน 5–10 นาที)', !ok);
+      setTimeout(() => location.reload(), 1200);
+    },
+
     uuid() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
       return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2);

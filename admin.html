@@ -99,7 +99,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 </style></head><body>
 <header class="top">
   <div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div>
-  <div class="who"><span id="whoName"></span><button onclick="POS.logout()">ออก</button></div>
+  <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
   <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="stock">สต็อก</button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set">ตั้งค่า</button>
@@ -795,7 +795,9 @@ function renderSettings() {
       <label>หน่วย (คั่นด้วย ,)</label><input id="s_units" value="${esc(s.units)}">
       <label>แผนก (ใช้ในใบเบิก)</label><input id="s_department" value="${esc(s.department || '')}">
       <div class="sec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
-      <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>`;
+      <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>
+      <div class="sec"><h4>อัปเดตระบบ</h4><div class="hint" style="margin-bottom:8px">ปกติระบบอัปเดตเองภายใน 5–10 นาทีหลังมีการแก้ไข กดปุ่มนี้ถ้าอยากได้เวอร์ชันล่าสุดทันที (หรือกด 🔄 มุมขวาบน)</div>
+      <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>`;
     bindImg(el, () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
     $('sSave').onclick = async () => {
       keep(); const b = $('sSave'); busy(b, true);
