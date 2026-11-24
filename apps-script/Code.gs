@@ -16,7 +16,7 @@ const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty'],
-  PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines'],
+  PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
   Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url'],
   SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
@@ -106,7 +106,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v6')) return;
+  if (cache.get('setup_ok_v7')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -129,7 +129,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v6', '1', 21600);
+  cache.put('setup_ok_v7', '1', 21600);
 }
 
 function headers_(name) {
@@ -358,7 +358,7 @@ function cleanVariant_(r, admin) {
   return o;
 }
 
-function loadPackages_() {
+function loadPackagesRaw_() {
   const slots = readTable_('PackageSlots');
   return readTable_('Packages').map(function (r) {
     return {
@@ -366,11 +366,41 @@ function loadPackages_() {
       image_url: str_(r.image_url), active: bool_(r.active), total_qty: Math.max(0, num_(r.total_qty)),
       slots: slots.filter(function (s) { return str_(s.package_id) === str_(r.package_id); }).map(function (s) {
         return {
-          slot: str_(s.slot), qty: s.qty === '' ? 0 : Math.max(0, num_(s.qty)), lines: Math.max(1, num_(s.lines) || 1),
+          slot: str_(s.slot), kind: str_(s.kind), qty: s.qty === '' ? 0 : Math.max(0, num_(s.qty)), lines: Math.max(1, num_(s.lines) || 1),
           items: str_(s.allowed_items).split(',').map(function (x) { return x.trim(); }).filter(String)
         };
       })
     };
+  });
+}
+
+/**
+ * แพ็กเกจแบบใหม่: fixed = สินค้าติดแพ็กเกจ [{id, qty}] · pool = สินค้าที่ให้เลือกเองหน้าร้าน · total = จำนวนชิ้นทั้งหมด
+ * แพ็กเกจแบบเก่า (ช่อง A/B/C) จะถูกแปลง: สินค้าทุกช่องรวมเป็น pool, total = total_qty หรือผลรวมจำนวนของแต่ละช่อง
+ */
+function packageDef_(k) {
+  const typed = k.slots.some(function (s) { return s.kind === 'fixed' || s.kind === 'pool'; });
+  const fixed = [], pool = [];
+  if (typed) {
+    k.slots.forEach(function (s) {
+      if (s.kind === 'fixed' && s.items[0] && s.qty > 0) fixed.push({ id: s.items[0], qty: s.qty });
+      if (s.kind === 'pool') s.items.forEach(function (i) { if (pool.indexOf(i) < 0) pool.push(i); });
+    });
+  } else {
+    k.slots.forEach(function (s) { s.items.forEach(function (i) { if (pool.indexOf(i) < 0) pool.push(i); }); });
+  }
+  const fixedQty = fixed.reduce(function (a, f) { return a + f.qty; }, 0);
+  let total = k.total_qty || 0;
+  if (!total && !typed) total = k.slots.reduce(function (a, s) { return a + (s.qty || 0); }, 0);
+  if (!total && !pool.length) total = fixedQty;
+  return { fixed: fixed, pool: pool, total: total, choose: Math.max(0, total - fixedQty) };
+}
+
+function loadPackages_() {
+  return loadPackagesRaw_().map(function (k) {
+    const d = packageDef_(k);
+    k.fixed = d.fixed; k.pool = d.pool; k.total = d.total; k.choose = d.choose;
+    return k;
   });
 }
 
@@ -502,41 +532,30 @@ function createSale_(p, user) {
         setNo += 1;
         items.push({ item_id: k.package_id, item_name: k.name, qty: qty, unit_price: k.price, line_total: k.price * qty, package_id: k.package_id, package_set_no: setNo, slot: '' });
         subtotal += k.price * qty;
-        // ช่องที่ตั้งไว้หลังบ้าน (จำกัดสินค้า/จำนวน) + ช่องที่เพิ่มเองหน้าร้าน (เลือกสินค้าใดก็ได้ในแพ็กเกจ)
-        const sel = ln.selections || {};
-        const defined = {};
-        const union = [];
-        k.slots.forEach(function (s) {
-          defined[s.slot] = s;
-          s.items.forEach(function (i) { if (union.indexOf(i) < 0) union.push(i); });
+        // สินค้าติดแพ็กเกจ (ใส่ให้อัตโนมัติ) + สินค้าที่เลือกเองจาก pool ต้องรวมครบจำนวนชิ้นทั้งหมดพอดี
+        const merged = {};
+        const picks = Array.isArray(ln.selections && ln.selections.pool) ? ln.selections.pool : [];
+        picks.forEach(function (x) {
+          const pid = str_(x && x.id), q = Math.round(num_(x && x.qty));
+          if (pid && q > 0) merged[pid] = (merged[pid] || 0) + q;
         });
-        const names = k.slots.map(function (s) { return s.slot; });
-        Object.keys(sel).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
         let pieces = 0;
-        names.forEach(function (name) {
-          const s = defined[name];
-          let picks = sel[name];
-          // รูปแบบเดิม: 'P001' (ได้ครบตามจำนวนของช่อง)
-          if (!Array.isArray(picks)) picks = picks ? [{ id: picks, qty: s && s.qty > 0 ? s.qty : 1 }] : [];
-          const merged = {};
-          picks.forEach(function (x) {
-            const pid = str_(x && x.id), q = Math.round(num_(x && x.qty));
-            if (pid && q > 0) merged[pid] = (merged[pid] || 0) + q;
-          });
-          const ids = Object.keys(merged);
-          const sum = ids.reduce(function (a, i) { return a + merged[i]; }, 0);
-          if (s && s.qty > 0 && sum !== s.qty) throw new Error('ช่อง ' + name + ' ของ ' + k.name + ' ต้องเลือกรวม ' + s.qty + ' ชิ้น (เลือกมา ' + sum + ')');
-          const allowed = s ? s.items : union;
-          ids.forEach(function (chosen) {
-            if (allowed.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกในช่อง ' + name + ' ไม่อยู่ในแพ็กเกจ ' + k.name);
-            const it = idx[chosen];
-            if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
-            items.push({ item_id: chosen, item_name: it.name, qty: qty * merged[chosen], unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: name });
-            deductions.push([chosen, qty * merged[chosen]]);
-          });
-          pieces += sum;
+        k.fixed.forEach(function (f) {
+          const it = idx[f.id];
+          if (!it) throw new Error('ไม่พบสินค้าที่ติดแพ็กเกจ ' + k.name);
+          items.push({ item_id: f.id, item_name: it.name, qty: qty * f.qty, unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: 'ติดเซต' });
+          deductions.push([f.id, qty * f.qty]);
+          pieces += f.qty;
         });
-        if (k.total_qty > 0 && pieces !== k.total_qty) throw new Error(k.name + ' ต้องเลือกรวม ' + k.total_qty + ' ชิ้น (เลือกมา ' + pieces + ')');
+        Object.keys(merged).forEach(function (chosen) {
+          if (k.pool.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
+          const it = idx[chosen];
+          if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
+          items.push({ item_id: chosen, item_name: it.name, qty: qty * merged[chosen], unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: 'เลือก' });
+          deductions.push([chosen, qty * merged[chosen]]);
+          pieces += merged[chosen];
+        });
+        if (k.total > 0 && pieces !== k.total) throw new Error(k.name + ' ต้องมีสินค้ารวม ' + k.total + ' ชิ้น (ตอนนี้ ' + pieces + ')');
         if (!pieces) throw new Error('ยังไม่ได้เลือกสินค้าใน ' + k.name);
       } else {
         const id = str_(ln.id);
@@ -750,38 +769,47 @@ function saveVariant_(p, user) {
 function savePackage_(p, user) {
   const name = str_(p.name);
   if (!name) throw new Error('กรุณาใส่ชื่อแพ็กเกจ');
-  const slots = (p.slots || []).map(function (s) {
-    return { slot: str_(s.slot), qty: Math.max(0, Math.round(num_(s.qty))), lines: Math.min(20, Math.max(1, Math.round(num_(s.lines) || 1))), items: (s.items || []).map(str_).filter(String) };
-  });
-  if (!slots.length) throw new Error('แพ็กเกจต้องมีอย่างน้อย 1 ช่อง');
-  slots.forEach(function (s) { if (!s.slot || !s.items.length) throw new Error('ทุกช่องต้องมีชื่อและสินค้าอย่างน้อย 1 รายการ'); });
   const totalQty = Math.max(0, Math.round(num_(p.total_qty)));
-  const fixed = slots.reduce(function (a, s) { return a + s.qty; }, 0);
-  if (totalQty && fixed > totalQty) throw new Error('จำนวนชิ้นของแต่ละช่องรวมกัน (' + fixed + ') มากกว่าจำนวนชิ้นทั้งหมด (' + totalQty + ')');
+  if (!totalQty) throw new Error('กรุณาใส่จำนวนชิ้นทั้งหมดในแพ็กเกจ');
+  const fixedMap = {};
+  (p.fixed || []).forEach(function (f) {
+    const id = str_(f && f.id), q = Math.round(num_(f && f.qty));
+    if (id && q > 0) fixedMap[id] = (fixedMap[id] || 0) + q;
+  });
+  const fixed = Object.keys(fixedMap).map(function (id) { return { id: id, qty: fixedMap[id] }; });
+  const pool = (p.pool || []).map(str_).filter(String).filter(function (v, i, a) { return a.indexOf(v) === i; });
+  const fixedQty = fixed.reduce(function (a, f) { return a + f.qty; }, 0);
+  if (fixedQty > totalQty) throw new Error('สินค้าติดแพ็กเกจ (' + fixedQty + ' ชิ้น) มากกว่าจำนวนชิ้นทั้งหมด (' + totalQty + ')');
+  if (fixedQty < totalQty && !pool.length) throw new Error('ต้องให้ลูกค้าเลือกเองอีก ' + (totalQty - fixedQty) + ' ชิ้น กรุณาติ๊กสินค้าที่ให้เลือกอย่างน้อย 1 รายการ');
+  if (!fixed.length && !pool.length) throw new Error('แพ็กเกจต้องมีสินค้าอย่างน้อย 1 ชิ้น');
   return withLock_(function () {
+    const idx = stockIndex_();
+    fixed.concat(pool.map(function (i) { return { id: i }; })).forEach(function (f) { if (!idx[f.id]) throw new Error('ไม่พบสินค้า ' + f.id); });
     const rows = readTable_('Packages');
     let id = str_(p.package_id);
     const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false, total_qty: totalQty };
-    const slotText = function (list) { return list.map(function (x) { return x.slot + (x.qty !== 1 ? '×' + (x.qty || 'อิสระ') : '') + (x.lines > 1 ? ' ' + x.lines + 'บรรทัด' : '') + '[' + x.items.join(',') + ']'; }).join(' '); };
+    const nm = function (i) { return idx[i] ? idx[i].name : i; };
+    const contents = function (fx, pl) { return 'ติดแพ็กเกจ: ' + (fx.map(function (f) { return nm(f.id) + '×' + f.qty; }).join(', ') || '-') + ' · ให้เลือก: ' + (pl.map(nm).join(', ') || '-'); };
     let logDetail;
     if (id) {
       const r = rows.filter(function (x) { return str_(x.package_id) === id; })[0];
       if (!r) throw new Error('ไม่พบแพ็กเกจ');
-      updateRow_('Packages', r._row, obj);
       const old = loadPackages_().filter(function (k) { return k.package_id === id; })[0];
+      updateRow_('Packages', r._row, obj);
       const d = [diff_(r, obj)];
-      if (old && slotText(old.slots) !== slotText(slots)) d.push('ช่องสินค้า: ' + slotText(old.slots) + ' → ' + slotText(slots));
+      if (old && contents(old.fixed, old.pool) !== contents(fixed, pool)) d.push(contents(old.fixed, old.pool) + ' → ' + contents(fixed, pool));
       logDetail = ['แก้ไข', d.filter(String).join(' · ')];
     } else {
       id = nextId_(rows, 'package_id', 'PK', 3);
       obj.package_id = id;
       appendRow_('Packages', obj);
-      logDetail = ['เพิ่ม', [diff_(null, obj), 'ช่องสินค้า: ' + slotText(slots)].filter(String).join(' · ')];
+      logDetail = ['เพิ่ม', [diff_(null, obj), contents(fixed, pool)].filter(String).join(' · ')];
     }
     if (logDetail[1]) log_(user, logDetail[0], 'แพ็กเกจ', id, name, logDetail[1]);
     const s = sh_('PackageSlots');
     readTable_('PackageSlots').filter(function (r) { return str_(r.package_id) === id; }).reverse().forEach(function (r) { s.deleteRow(r._row); });
-    appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(','), lines: x.lines }; }));
+    appendRows_('PackageSlots', fixed.map(function (f) { return { package_id: id, slot: 'ติดเซต', kind: 'fixed', qty: f.qty, allowed_items: f.id, lines: 1 }; })
+      .concat(pool.length ? [{ package_id: id, slot: 'เลือก', kind: 'pool', qty: 0, allowed_items: pool.join(','), lines: 1 }] : []));
     catalogChanged_();
     return { package_id: id };
   });
@@ -1011,7 +1039,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v6');
+  CacheService.getScriptCache().remove('setup_ok_v7');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

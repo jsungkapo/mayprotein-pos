@@ -54,6 +54,9 @@ header.top a.back{color:#1f6fae}
 .urow .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .urow select{width:auto;padding:6px 8px;font-size:14px}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
+.pkgsum{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--pink-soft);font-size:14px}
+.fxrow{display:flex;gap:6px;margin-bottom:6px}.fxrow select{flex:1;min-width:0}.fxrow input{width:80px;flex:none}
+.fxrow .x{flex:none;width:36px;border:0;background:#eee;border-radius:50%}
 #mSlip{z-index:45}#mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
 .rqline{background:#fafafa;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px}
 .rqline .top{display:flex;gap:6px;align-items:center}
@@ -427,73 +430,86 @@ function sellables() {
 }
 function renderPackages() {
   $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}">` : '🎁'}</div>
-    <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${k.total_qty ? `รวม ${k.total_qty} ชิ้น · ` : ''}${k.slots.map(s => esc(s.slot) + (s.qty ? '×' + s.qty : '') + ': ' + s.items.length + ' ตัวเลือก').join(' · ')}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
+    <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${(d => `รวม ${d.total} ชิ้น · ติดแพ็กเกจ ${d.fixed.reduce((a, f) => a + f.qty, 0)} · ให้เลือก ${d.pool.length} รายการ`)(pkgDef(k))}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
 }
-const letter = i => i < 26 ? String.fromCharCode(65 + i) : 'S' + (i + 1);
+/** แปลงแพ็กเกจเป็นรูปแบบใหม่: fixed = ติดแพ็กเกจ, pool = ให้ลูกค้าเลือกเอง, total = จำนวนชิ้นทั้งหมด */
+function pkgDef(k) {
+  if (k.pool) return { fixed: (k.fixed || []).map(f => ({ ...f })), pool: [...k.pool], total: k.total || k.total_qty || 0 };
+  const pool = [...new Set((k.slots || []).flatMap(s => s.items))];
+  return { fixed: [], pool, total: k.total_qty || (k.slots || []).reduce((a, s) => a + (s.qty || 0), 0) };
+}
 /** copy = { from: package_id, data: ค่าที่คัดลอกมา } */
 function editPackage(id, copy) {
   const src = id ? D.packages.find(k => k.package_id === id) : copy ? copy.data : null;
-  const k = src ? JSON.parse(JSON.stringify(src)) : { name: '', price: '', description: '', image_url: '', active: true, slots: [{ slot: 'A', qty: 1, lines: 1, items: [] }, { slot: 'B', qty: 1, lines: 1, items: [] }] };
+  const base = src ? JSON.parse(JSON.stringify(src)) : { name: '', price: '', description: '', image_url: '', active: true };
+  const def = src ? pkgDef(base) : { fixed: [], pool: [], total: '' };
+  const k = { ...base, total: def.total || '', fixed: def.fixed, pool: def.pool };
   const all = sellables();
   const el = $('editSheet');
-  const filters = {};
+  let filter = '';
   const keep = () => {
-    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked; k.total_qty = $('kTotal').value;
-    k.slots.forEach((s, i) => { s.slot = letter(i); s.qty = Math.max(0, Math.round(+el.querySelector(`#sq${i}`).value || 0)); s.lines = 1; });
+    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked; k.total = $('kTotal').value;
+    el.querySelectorAll('.fxrow').forEach((row, i) => { k.fixed[i].id = row.querySelector('select').value; k.fixed[i].qty = Math.max(0, Math.round(+row.querySelector('input').value || 0)); });
+  };
+  const fixedQty = () => k.fixed.reduce((a, f) => a + (f.id ? +f.qty || 0 : 0), 0);
+  const summary = () => {
+    const t = +k.total || 0, fq = fixedQty(), ch = t - fq;
+    if (!t) return '<span style="color:var(--bad)">ใส่จำนวนชิ้นทั้งหมดก่อน</span>';
+    if (ch < 0) return `<span style="color:var(--bad)">สินค้าติดแพ็กเกจ ${fq} ชิ้น เกินจำนวนทั้งหมด ${t} ชิ้น</span>`;
+    return `ทั้งหมด <b>${t}</b> ชิ้น = ติดแพ็กเกจ <b>${fq}</b> + ให้ลูกค้าเลือกเอง <b>${ch}</b> ชิ้น`;
   };
   const render = () => {
     el.innerHTML = `<h3>${id ? 'แก้ไขแพ็กเกจ' : copy ? 'คัดลอกแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
-      ${copy ? `<div class="hint" style="margin-bottom:8px">คัดลอกจาก "${esc((D.packages.find(x => x.package_id === copy.from) || {}).name || '')}" พร้อมช่องสินค้าทั้งหมด แก้แล้วกดบันทึก</div>` : ''}
+      ${copy ? `<div class="hint" style="margin-bottom:8px">คัดลอกจาก "${esc((D.packages.find(x => x.package_id === copy.from) || {}).name || '')}" แก้แล้วกดบันทึก</div>` : ''}
       ${imgBlock(k.image_url, '🎁')}
       <label>ชื่อแพ็กเกจ *</label><input id="kName" value="${esc(k.name)}">
-      <label>ราคาเซต (บาท)</label><input id="kPrice" type="number" inputmode="decimal" value="${k.price}">
-      <label>คำอธิบาย</label><input id="kDesc" value="${esc(k.description)}" placeholder="เช่น ซื้อ A + B รับ C">
-      <label>จำนวนชิ้นทั้งหมดในแพ็กเกจ</label><input id="kTotal" type="number" inputmode="numeric" value="${k.total_qty || ''}" placeholder="เช่น 7 (เว้นว่าง = ไม่ตรวจ)">
-      <div class="hint">หน้าขายต้องเลือกสินค้ารวมทุกช่องให้ครบจำนวนนี้พอดี ถึงจะเพิ่มลงตะกร้าได้</div>
+      <div class="row"><div><label>ราคาเซต (บาท)</label><input id="kPrice" type="number" inputmode="decimal" value="${k.price}"></div><div><label>จำนวนชิ้นทั้งหมด *</label><input id="kTotal" type="number" inputmode="numeric" value="${k.total}" placeholder="เช่น 3"></div></div>
+      <label>คำอธิบาย</label><input id="kDesc" value="${esc(k.description)}" placeholder="เช่น ซื้อ 2 แถมรสพีช 1">
       <label class="chk"><input type="checkbox" id="kAct" ${k.active ? 'checked' : ''}> เปิดขาย</label>
-      <div class="sec"><h4><span>ช่องสินค้า</span></h4>
-      <div class="hint" style="margin-bottom:8px">แต่ละช่องเลือกได้ว่ามีสินค้าอะไรให้เลือก และบังคับจำนวนชิ้นของช่องได้ (เว้นว่าง = ไม่บังคับ) · หน้าขายกด "เพิ่มช่อง" หรือ "เพิ่มบรรทัด" เองได้ โดยช่องที่เพิ่มเองเลือกได้ทุกสินค้าในแพ็กเกจนี้</div>
-      ${k.slots.map((s, i) => `<div class="slot"><div class="hd"><span class="slotname">ช่อง ${letter(i)}</span><span style="flex:1"></span>${k.slots.length > 1 ? `<a data-del="${i}">ลบช่อง ${letter(i)}</a>` : ''}</div>
-        <div class="hd" style="margin-top:8px"><span>จำนวนชิ้นของช่องนี้</span><input id="sq${i}" type="number" inputmode="numeric" value="${s.qty || ''}" placeholder="ไม่บังคับ" style="width:90px;flex:none"></div>
-        <input data-filter="${i}" placeholder="🔍 กรองสินค้า" style="margin-top:8px" value="${esc(filters[i] || '')}">
-        <div class="picks">${all.filter(x => !filters[i] || x.name.toLowerCase().includes(filters[i].toLowerCase()) || s.items.includes(x.id)).map(x => `<label><input type="checkbox" data-slot="${i}" value="${esc(x.id)}" ${s.items.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
-        <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
-      <button class="btn line" id="addSlot">+ เพิ่มช่อง ${letter(k.slots.length)}</button>
-      </div>
+      <div class="pkgsum" id="kSum">${summary()}</div>
+
+      <div class="sec"><h4><span>1. สินค้าติดแพ็กเกจ (ค่าเริ่มต้น)</span></h4>
+      <div class="hint" style="margin-bottom:8px">สินค้าที่ต้องมีในแพ็กเกจเสมอ หน้าขายจะใส่ให้อัตโนมัติ เช่น โปรตีนรสพีช 1 ซอง (ไม่มีก็ได้)</div>
+      ${k.fixed.map((f, i) => `<div class="fxrow"><select><option value="">— เลือกสินค้า —</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === f.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select><input type="number" inputmode="numeric" value="${f.qty}" placeholder="จำนวน"><button class="x" data-fx="${i}">✕</button></div>`).join('')}
+      <button class="btn sm line" id="fxAdd">+ เพิ่มสินค้าติดแพ็กเกจ</button></div>
+
+      <div class="sec"><h4><span>2. สินค้าที่ให้ลูกค้าเลือกเอง</span></h4>
+      <div class="hint" style="margin-bottom:8px">ติ๊กสินค้าที่ลูกค้าเลือกได้ (เช่น โปรตีน 40 กรัมทุกรส) หน้าขายทุกช่องที่กด "เพิ่มช่องสินค้า" จะเลือกได้เฉพาะสินค้าที่ติ๊กไว้นี้</div>
+      <input id="kFilter" placeholder="🔍 กรองสินค้า" value="${esc(filter)}">
+      <div class="picks">${all.filter(x => !filter || x.name.toLowerCase().includes(filter.toLowerCase()) || k.pool.includes(x.id)).map(x => `<label><input type="checkbox" data-pool value="${esc(x.id)}" ${k.pool.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
+      <div class="hint" id="poolCnt">ติ๊กไว้ ${k.pool.length} รายการ</div></div>
+
       <br><button class="btn" id="kSave">บันทึก</button>
       ${id ? '<br><br><button class="btn line" id="kCopy">📄 คัดลอกเป็นแพ็กเกจใหม่</button>' : ''}
       <br><br><button class="btn g" onclick="closeM('mEdit')">ปิด</button>`;
     bindImg(el, () => k.image_url, (u, re) => { if (re === false) { k.image_url = u; return; } keep(); k.image_url = u; render(); }, 'sq');
-    $('addSlot').onclick = () => { keep(); k.slots.push({ slot: letter(k.slots.length), qty: 1, lines: 1, items: [] }); render(); el.querySelectorAll('.slot')[k.slots.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' }); };
-    el.querySelectorAll('[data-del]').forEach(a => a.onclick = async () => {
-      const i = +a.dataset.del;
-      if (k.slots[i].items.length && !await confirmBox(`ลบช่อง ${letter(i)}?`, 'ช่องถัดไปจะเลื่อนขึ้นมาแทน (เช่น C จะกลายเป็น ' + letter(i) + ')', 'ลบช่อง', true)) return;
-      keep(); k.slots.splice(i, 1); k.slots.forEach((s, j) => s.slot = letter(j)); render();
-    });
-    el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
-    el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
-    // ปุ่มลบแพ็กเกจซ่อนไว้ก่อนตามที่ผู้ใช้ขอ (โค้ดยังอยู่ เปิดใหม่ได้โดยใส่ปุ่ม id="kDel" กลับ)
-    if (id && $('kDel')) $('kDel').onclick = async () => {
-      const ok = await confirmBox('ลบแพ็กเกจ "' + src.name + '"?', 'ยอดขายแพ็กเกจนี้ที่ขายไปแล้วยังอยู่ในประวัติ แต่ลบแล้วกู้คืนไม่ได้\nถ้าแค่อยากหยุดขายชั่วคราว ให้เอาติ๊ก "เปิดขาย" ออกแทน', 'ลบแพ็กเกจ', true);
-      if (!ok) return;
-      const b = $('kDel'); busy(b, true);
-      try { await POS.call('deletePackage', { package_id: id }); POS.toast('ลบแล้ว'); closeM('mEdit'); D.packages = D.packages.filter(x => x.package_id !== id); renderPackages(); load(); }
-      catch (e) { POS.toast(e.message, true); busy(b, false); }
-    };
+    const upd = () => { keep(); $('kSum').innerHTML = summary(); };
+    $('kTotal').oninput = upd;
+    el.querySelectorAll('.fxrow input, .fxrow select').forEach(x => x.oninput = x.onchange = upd);
+    $('fxAdd').onclick = () => { keep(); k.fixed.push({ id: '', qty: 1 }); render(); };
+    el.querySelectorAll('[data-fx]').forEach(b => b.onclick = () => { keep(); k.fixed.splice(+b.dataset.fx, 1); render(); });
+    el.querySelectorAll('[data-pool]').forEach(c => c.onchange = () => { k.pool = c.checked ? [...new Set([...k.pool, c.value])] : k.pool.filter(x => x !== c.value); $('poolCnt').textContent = 'ติ๊กไว้ ' + k.pool.length + ' รายการ'; });
+    $('kFilter').oninput = () => { keep(); filter = $('kFilter').value; const pos = $('kFilter').selectionStart; render(); $('kFilter').focus(); $('kFilter').setSelectionRange(pos, pos); };
     if (id) $('kCopy').onclick = () => {
       if (uploads.size) return POS.toast('รอให้อัปโหลดรูปเสร็จก่อน', true);
       keep();
       const data = JSON.parse(JSON.stringify(k));
       delete data.package_id; data.name = k.name.trim() + ' (copy)'; data.active = true;
+      data.total_qty = +k.total || 0;
       editPackage(null, { from: id, data });
     };
     $('kSave').onclick = async () => {
       keep();
+      const t = +k.total || 0, fq = fixedQty();
+      if (!k.name.trim()) return POS.toast('กรุณาใส่ชื่อแพ็กเกจ', true);
+      if (!t) return POS.toast('กรุณาใส่จำนวนชิ้นทั้งหมด', true);
+      if (fq > t) return POS.toast('สินค้าติดแพ็กเกจเกินจำนวนชิ้นทั้งหมด', true);
+      if (fq < t && !k.pool.length) return POS.toast(`ต้องติ๊กสินค้าที่ให้ลูกค้าเลือกเอง (เลือกได้ ${t - fq} ชิ้น)`, true);
       const b = $('kSave'); busy(b, true);
       await waitUploads(b);
       if (isTemp(k.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
       try {
-        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, total_qty: +k.total_qty || 0, slots: k.slots });
+        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, total_qty: t, fixed: k.fixed.filter(f => f.id && f.qty > 0), pool: k.pool });
         POS.toast('บันทึกแล้ว'); closeM('mEdit'); load();
       } catch (e) { POS.toast(e.message, true); busy(b, false); }
     };

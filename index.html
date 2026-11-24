@@ -61,7 +61,11 @@ main{flex:1;overflow-y:auto;min-height:0}
 .kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
 .kpi div{background:#fff;border-radius:12px;padding:12px;font-size:13px;color:#666}
 .kpi b{display:block;font-size:22px;color:var(--pink);margin-top:2px}
-.pktotal{margin:10px 0 2px;padding:10px 12px;border-radius:10px;background:#f1f1f4;font-size:15px;text-align:center}
+.pktotal{margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:#f1f1f4;font-size:15px;text-align:center}
+.pktotal .big{font-size:30px;font-weight:800}
+.pkfix{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #eee;font-size:15px}
+.pkno{width:20px;flex:none;align-self:center;color:var(--muted);font-weight:700;text-align:center}
+.pkx{width:34px;flex:none;border:0;background:#eee;border-radius:50%;font-size:15px}
 .pktotal.ok{background:#e1f5ea;color:var(--ok)}.pktotal.over{background:#fde4e4;color:var(--bad)}
 .pkaddrow{display:inline-block;font-size:13px;margin-top:2px}
 .pkdel{margin-left:8px;font-size:13px;color:var(--bad)!important}
@@ -310,83 +314,69 @@ function openVar(p) {
 function addVar(vid) { const v = V(vid); closeM('mVar'); addLine({ key: vid, type: 'variant', id: vid, pid: v.product_id, name: vName(v), price: vPrice(v) }); }
 
 /* ---------- package picker ----------
- * ช่องที่ตั้งไว้หลังบ้าน (จำกัดสินค้า และจำนวนถ้ากำหนดไว้) + กด "เพิ่มช่อง" หน้าร้านได้ (เลือกสินค้าใดก็ได้ในแพ็กเกจ)
- * ถ้าแพ็กเกจกำหนด "จำนวนชิ้นทั้งหมด" ต้องเลือกให้ครบพอดี */
+ * สินค้าติดแพ็กเกจ (ล็อกไว้) + ช่องสินค้าที่เลือกเองจากรายการที่หลังบ้านติ๊กไว้ กด "เพิ่มช่องสินค้า" ได้เรื่อยๆ
+ * ต้องรวมครบ "จำนวนชิ้นทั้งหมด" ที่ตั้งไว้หลังบ้านพอดี */
 let pk = null;
-const LETTER = i => i < 26 ? String.fromCharCode(65 + i) : 'S' + (i + 1);
+function pkDef(k) {
+  if (k.pool) return { fixed: k.fixed || [], pool: k.pool, total: k.total || 0 };
+  const pool = [...new Set(k.slots.flatMap(s => s.items))];
+  return { fixed: [], pool, total: k.total_qty || k.slots.reduce((a, s) => a + (s.qty || 0), 0) };
+}
 function openPk(id) {
   const k = cat.packages.find(x => x.package_id === id);
-  const union = [...new Set(k.slots.flatMap(s => s.items))];
-  const slots = k.slots.map(s => ({
-    name: s.slot, qty: s.qty || 0, items: s.items, fixed: true,
-    rows: Array.from({ length: Math.max(1, s.lines || 1) }, (_, i) => ({ id: s.items.length === 1 && i === 0 ? s.items[0] : '', qty: i === 0 ? (s.qty || 0) : 0 }))
-  }));
-  pk = { k, union, slots };
+  const d = pkDef(k);
+  pk = { k, ...d, fixedQty: d.fixed.reduce((a, f) => a + f.qty, 0), rows: [] };
+  if (pk.total - pk.fixedQty > 0) pk.rows.push({ id: d.pool.length === 1 ? d.pool[0] : '', qty: d.pool.length === 1 ? pk.total - pk.fixedQty : 0 });
   renderPk();
   $('mPk').classList.add('on');
   $('mPk').querySelector('.sheet').scrollTop = 0;
 }
-const rowsSum = rows => rows.reduce((a, r) => a + (r.id ? r.qty || 0 : 0), 0);
-const pkTotal = () => pk.slots.reduce((a, s) => a + rowsSum(s.rows), 0);
-function nextSlotName() { const used = pk.slots.map(s => s.name); let i = 0; while (used.includes(LETTER(i))) i++; return LETTER(i); }
+const pkChosen = () => pk.rows.reduce((a, r) => a + (r.id ? r.qty || 0 : 0), 0);
+const pkTotal = () => pk.fixedQty + pkChosen();
 function renderPk() {
-  const k = pk.k, total = pkTotal(), need = k.total_qty || 0;
+  const k = pk.k, total = pkTotal(), need = pk.total;
   const tcls = need ? (total === need ? 'ok' : total > need ? 'over' : '') : '';
+  const left = need - total;
   $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}
-    <div class="pktotal ${tcls}">${need ? `เลือกแล้ว <b>${total}</b> / ${need} ชิ้น${tcls === 'ok' ? ' ✓' : tcls === 'over' ? ' (เกิน)' : ` · ขาดอีก ${need - total}`}` : `เลือกแล้ว <b>${total}</b> ชิ้น`}</div>` +
-    pk.slots.map((s, si) => {
-      const sum = rowsSum(s.rows), okc = s.qty ? (sum === s.qty ? 'ok' : sum > s.qty ? 'over' : '') : '';
-      return `<div class="pkslot"><div class="pkh"><b>ช่อง ${esc(s.name)}</b><span>${s.qty ? `ต้องเลือก ${s.qty} ชิ้น` : s.fixed ? 'ไม่จำกัดจำนวน' : 'ช่องที่เพิ่มเอง'}</span>${s.qty ? `<span class="pkst ${okc}">${sum}/${s.qty}${okc === 'ok' ? ' ✓' : ''}</span>` : ''}${s.fixed ? '' : `<a class="pkdel" data-del="${si}">ลบช่อง</a>`}</div>` +
-        s.rows.map((r, ri) => `<div class="pkrow"><select data-s="${si}" data-i="${ri}"><option value="">— เลือกสินค้า —</option>${s.items.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-s="${si}" data-i="${ri}">${r.qty}</button></div>`).join('') +
-        `<a class="pkaddrow" data-row="${si}">+ เพิ่มบรรทัดในช่อง ${esc(s.name)}</a></div>`;
-    }).join('') +
-    `<button class="btn line" id="pkAddSlot" style="margin-top:10px;text-align:center">+ เพิ่มช่อง ${nextSlotName()}</button>
-    <br><br><button class="btn" onclick="addPk()">เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
-  const remain = s => {
-    const need2 = pk.k.total_qty ? pk.k.total_qty - pkTotal() : Infinity;
-    const slotLeft = s.qty ? s.qty - rowsSum(s.rows) : Infinity;
-    const v = Math.min(need2, slotLeft);
-    return v === Infinity ? 1 : Math.max(0, v);
-  };
-  $('pkSheet').querySelectorAll('select[data-s]').forEach(el => el.onchange = () => {
-    const s = pk.slots[+el.dataset.s], r = s.rows[+el.dataset.i];
+    <div class="pktotal ${tcls}"><span class="big">${total} / ${need || '-'}</span> ชิ้น<br><small>${tcls === 'ok' ? 'ครบแล้ว ✓' : tcls === 'over' ? `เกินมา ${-left} ชิ้น` : `ต้องเลือกเพิ่มอีก ${left} ชิ้น`}</small></div>
+    ${pk.fixed.length ? `<div class="pkslot"><div class="pkh"><b>สินค้าติดแพ็กเกจ</b><span>ใส่ให้อัตโนมัติ</span></div>${pk.fixed.map(f => `<div class="pkfix">🔒 ${esc(itemName(f.id))}<b>× ${f.qty}</b></div>`).join('')}</div>` : ''}
+    ${pk.total - pk.fixedQty > 0 || pk.rows.length ? `<div class="pkslot"><div class="pkh"><b>เลือกสินค้า</b><span>เลือกได้ ${Math.max(0, pk.total - pk.fixedQty)} ชิ้น</span></div>
+      ${pk.rows.map((r, i) => `<div class="pkrow"><span class="pkno">${i + 1}</span><select data-i="${i}"><option value="">— เลือกสินค้า —</option>${pk.pool.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-i="${i}">${r.qty}</button>${pk.rows.length > 1 ? `<button class="pkx" data-rm="${i}">✕</button>` : ''}</div>`).join('')}
+      <button class="btn line" id="pkAddRow" style="margin-top:6px;display:flex;justify-content:center;align-items:center" ${left <= 0 ? 'disabled' : ''}>+ เพิ่มช่องสินค้า</button></div>` : ''}
+    <br><button class="btn" onclick="addPk()" ${tcls !== 'ok' && need ? 'disabled' : ''}>เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
+  $('pkSheet').querySelectorAll('select[data-i]').forEach(el => el.onchange = () => {
+    const r = pk.rows[+el.dataset.i];
     const had = !!r.id; r.id = el.value;
-    if (r.id && (!had || !r.qty)) { r.qty = 0; r.qty = remain(s) || 1; }
     if (!r.id) r.qty = 0;
+    else if (!had || !r.qty) { r.qty = 0; r.qty = Math.max(1, Math.min(1, pk.total - pkTotal())); }
     renderPk();
   });
   $('pkSheet').querySelectorAll('.qbtn').forEach(b => b.onclick = () => {
-    const s = pk.slots[+b.dataset.s], r = s.rows[+b.dataset.i];
-    numpad(`ช่อง ${s.name} · ${r.id ? itemName(r.id) : 'จำนวน'}`, r.qty, v => { r.qty = v; renderPk(); });
+    const r = pk.rows[+b.dataset.i];
+    numpad(`${r.id ? itemName(r.id) : 'จำนวน'} · ต้องการอีก ${Math.max(0, pk.total - pkTotal() + (r.id ? r.qty : 0))} ชิ้น`, r.qty, v => { r.qty = v; renderPk(); });
   });
-  $('pkSheet').querySelectorAll('[data-row]').forEach(a => a.onclick = () => { pk.slots[+a.dataset.row].rows.push({ id: '', qty: 0 }); renderPk(); });
-  $('pkSheet').querySelectorAll('[data-del]').forEach(a => a.onclick = () => { pk.slots.splice(+a.dataset.del, 1); renderPk(); });
-  $('pkAddSlot').onclick = () => {
-    pk.slots.push({ name: nextSlotName(), qty: 0, items: pk.union, fixed: false, rows: [{ id: '', qty: 0 }] });
-    renderPk();
-    const last = $('pkSheet').querySelectorAll('.pkslot'); last[last.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('pkSheet').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { pk.rows.splice(+b.dataset.rm, 1); renderPk(); });
+  const add = $('pkAddRow');
+  if (add) add.onclick = () => {
+    if (pk.rows.some(r => !r.id)) return POS.toast('เลือกสินค้าในช่องที่ว่างอยู่ก่อน', true);
+    pk.rows.push({ id: '', qty: 0 }); renderPk();
+    const sels = $('pkSheet').querySelectorAll('select[data-i]'); sels[sels.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 }
 function addPk() {
-  const k = pk.k, selections = {}, desc = [];
-  let total = 0;
-  for (const s of pk.slots) {
-    const merged = {};
-    for (const r of s.rows) {
-      if (r.qty > 0 && !r.id) return POS.toast(`ช่อง ${s.name}: เลือกสินค้าให้บรรทัดที่ใส่จำนวนไว้`, true);
-      if (r.id && r.qty > 0) merged[r.id] = (merged[r.id] || 0) + r.qty;
-    }
-    const sum = Object.values(merged).reduce((a, b) => a + b, 0);
-    if (s.qty && sum !== s.qty) return POS.toast(`ช่อง ${s.name} ต้องเลือกรวม ${s.qty} ชิ้น (ตอนนี้ ${sum})`, true);
-    total += sum;
-    if (!sum) continue;
-    selections[s.name] = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
-    desc.push(s.name + ': ' + selections[s.name].map(x => itemName(x.id).replace(/^May Protein /, '') + (x.qty > 1 || s.qty > 1 ? '×' + x.qty : '')).join(', '));
+  const k = pk.k, merged = {};
+  for (const r of pk.rows) {
+    if (r.qty > 0 && !r.id) return POS.toast('เลือกสินค้าให้ช่องที่ใส่จำนวนไว้', true);
+    if (r.id && r.qty > 0) merged[r.id] = (merged[r.id] || 0) + r.qty;
   }
-  if (k.total_qty && total !== k.total_qty) return POS.toast(`แพ็กเกจนี้ต้องเลือกรวม ${k.total_qty} ชิ้น (ตอนนี้ ${total})`, true);
+  const total = pkTotal();
+  if (pk.total && total !== pk.total) return POS.toast(`แพ็กเกจนี้ต้องมีสินค้ารวม ${pk.total} ชิ้น (ตอนนี้ ${total})`, true);
   if (!total) return POS.toast('ยังไม่ได้เลือกสินค้า', true);
+  const pool = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
+  const short = id => itemName(id).replace(/^May Protein /, '');
+  const desc = [...pk.fixed.map(f => short(f.id) + '×' + f.qty), ...pool.map(x => short(x.id) + '×' + x.qty)].join(', ');
   closeM('mPk');
-  addLine({ key: k.package_id + '|' + JSON.stringify(selections), type: 'package', id: k.package_id, name: k.name, price: k.price, selections, desc: desc.join(' · ') });
+  addLine({ key: k.package_id + '|' + JSON.stringify(pool), type: 'package', id: k.package_id, name: k.name, price: k.price, selections: { pool }, desc });
 }
 
 /* ---------- numpad ---------- */
@@ -493,7 +483,7 @@ function receiptHtml(b) {
   const head = b.items.filter(i => !i.slot);
   return `<div class="rc">${head.map(it => {
     const comps = it.package_id ? b.items.filter(x => x.slot && x.package_set_no === it.package_set_no) : [];
-    return `<div class="r"><span>${esc(it.item_name)} × ${it.qty}${comps.length ? `<small>${comps.map(c => esc(c.slot + ': ' + c.item_name.replace(/^May Protein /, '') + (c.qty / it.qty > 1 ? '×' + (c.qty / it.qty) : ''))).join(' · ')}</small>` : ''}</span><span>${money(it.line_total)}฿</span></div>`;
+    return `<div class="r"><span>${esc(it.item_name)} × ${it.qty}${comps.length ? `<small>${comps.map(c => esc((/^[A-Z]{1,2}\d*$/.test(c.slot) ? c.slot + ': ' : c.slot === 'ติดเซต' ? '🔒' : '') + c.item_name.replace(/^May Protein /, '') + '×' + (c.qty / it.qty))).join(' · ')}</small>` : ''}</span><span>${money(it.line_total)}฿</span></div>`;
   }).join('')}
   <div class="r" style="border-top:1px dashed #ccc;margin-top:6px;padding-top:6px"><span>รวม</span><span>${money(b.subtotal)}฿</span></div>
   ${b.discount_amount ? `<div class="r"><span>ส่วนลด${b.discount_type === 'percent' ? ' ' + b.discount_value + '%' : ''}</span><span>-${money(b.discount_amount)}฿</span></div>` : ''}
