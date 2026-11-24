@@ -189,6 +189,13 @@
     return new Blob(parts, { type: 'application/pdf' });
   }
 
+  // ใช้ร่วมกับรายงานยอดขาย (report.js)
+  window.PdfKit = {
+    W, H, MM, PT, FONT, painter, buildPdf, thaiDate: shortThai,
+    newPage() { const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); return { canvas: c, P: painter(ctx), ctx }; },
+    async fonts() { try { if (document.fonts) await Promise.race([document.fonts.load(`700 ${20 * PT}px Sarabun`).then(() => document.fonts.load(`400 ${13 * PT}px Sarabun`)), new Promise(r => setTimeout(r, 2500))]); } catch (e) {} }
+  };
+
   window.Requisition = {
     renderPages,
     async pdf(req) { return buildPdf(await renderPages(req)); },

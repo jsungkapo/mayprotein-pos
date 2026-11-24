@@ -48,6 +48,7 @@
 .urow .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .urow select{width:auto;padding:6px 8px;font-size:14px}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
+#mSlip{z-index:45}#mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
 .rqline{background:#fafafa;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px}
 .rqline .top{display:flex;gap:6px;align-items:center}
 .rqline .top select,.rqline .top input{flex:1;min-width:0}
@@ -151,7 +152,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
     <button class="btn g" id="cClear">ล้างที่นับไว้ทั้งหมด</button><br><br>
   </div>
   <div class="page" id="p-log">
-    <div class="row" style="gap:6px;margin-bottom:10px"><input id="lQ" placeholder="🔍 ค้นหา ชื่อสินค้า / คน / บิล"><select id="lF" style="flex:none;width:130px"><option value="">ทั้งหมด</option><option>ขาย</option><option value="สต็อก">สต็อก</option><option>สินค้า</option><option>ไซซ์/สี</option><option>แพ็กเกจ</option><option>พนักงาน</option><option>ตั้งค่า</option><option value="@ลบ">เฉพาะที่ลบ</option></select></div>
+    <div class="row" style="gap:6px;margin-bottom:10px"><input id="lQ" placeholder="🔍 ค้นหา ชื่อสินค้า / คน / บิล"><select id="lF" style="flex:none;width:130px"><option value="">ทั้งหมด</option><option>บิล</option><option value="@สลิป">บิลที่มีสลิป</option><option value="สต็อก">สต็อก</option><option>สินค้า</option><option>ไซซ์/สี</option><option>แพ็กเกจ</option><option>พนักงาน</option><option>ตั้งค่า</option><option value="@ลบ">เฉพาะที่ลบ</option></select></div>
     <div id="logList"></div>
   </div>
   <div class="page" id="p-set"><div class="box" id="setBox"></div></div>
@@ -163,6 +164,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
   <div class="row" style="margin-bottom:10px"><button class="btn sm" id="docDl">⬇️ ดาวน์โหลด PDF</button><button class="btn sm line" id="docShare">📤 แชร์</button></div>
   <div id="docPages"><div class="loading"><span class="spin dark"></span>กำลังสร้างใบเบิก</div></div>
   <br><button class="btn g" onclick="closeM('mDoc')">ปิด</button>
+</div></div>
+<div class="modal" id="mSlip"><div class="sheet" style="text-align:center;max-width:520px">
+  <h3 id="slipTitle">รูปสลิป</h3>
+  <div id="slipBody"></div>
+  <br><button class="btn g" onclick="closeM('mSlip')">ปิด</button>
 </div></div>
 <div class="modal" id="mSub"><div class="sheet" id="subSheet"></div></div>
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
@@ -415,7 +421,7 @@ function sellables() {
 }
 function renderPackages() {
   $('pkgList').innerHTML = D.packages.map(k => `<div class="it ${k.active ? '' : 'off'}" onclick="editPackage('${k.package_id}')"><div class="thumb" style="background:#fff3c4">${k.image_url ? `<img src="${esc(k.image_url)}">` : '🎁'}</div>
-    <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${k.slots.map(s => esc(s.slot) + ': ' + s.items.length + ' ตัวเลือก').join(' · ')}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
+    <div class="t"><b>${esc(k.name)}${k.active ? '' : '<span class="tag">ปิดขาย</span>'}</b><small>${k.total_qty ? `รวม ${k.total_qty} ชิ้น · ` : ''}${k.slots.map(s => esc(s.slot) + (s.qty ? '×' + s.qty : '') + ': ' + s.items.length + ' ตัวเลือก').join(' · ')}</small></div><div class="r"><b>${money(k.price)}฿</b></div></div>`).join('') || '<div class="empty">ยังไม่มีแพ็กเกจ</div>';
 }
 const letter = i => i < 26 ? String.fromCharCode(65 + i) : 'S' + (i + 1);
 /** copy = { from: package_id, data: ค่าที่คัดลอกมา } */
@@ -426,8 +432,8 @@ function editPackage(id, copy) {
   const el = $('editSheet');
   const filters = {};
   const keep = () => {
-    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked;
-    k.slots.forEach((s, i) => { s.slot = letter(i); s.qty = +el.querySelector(`#sq${i}`).value || 1; s.lines = Math.max(1, Math.min(20, +el.querySelector(`#sn${i}`).value || 1)); });
+    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked; k.total_qty = $('kTotal').value;
+    k.slots.forEach((s, i) => { s.slot = letter(i); s.qty = Math.max(0, Math.round(+el.querySelector(`#sq${i}`).value || 0)); s.lines = 1; });
   };
   const render = () => {
     el.innerHTML = `<h3>${id ? 'แก้ไขแพ็กเกจ' : copy ? 'คัดลอกแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
@@ -436,12 +442,13 @@ function editPackage(id, copy) {
       <label>ชื่อแพ็กเกจ *</label><input id="kName" value="${esc(k.name)}">
       <label>ราคาเซต (บาท)</label><input id="kPrice" type="number" inputmode="decimal" value="${k.price}">
       <label>คำอธิบาย</label><input id="kDesc" value="${esc(k.description)}" placeholder="เช่น ซื้อ A + B รับ C">
+      <label>จำนวนชิ้นทั้งหมดในแพ็กเกจ</label><input id="kTotal" type="number" inputmode="numeric" value="${k.total_qty || ''}" placeholder="เช่น 7 (เว้นว่าง = ไม่ตรวจ)">
+      <div class="hint">หน้าขายต้องเลือกสินค้ารวมทุกช่องให้ครบจำนวนนี้พอดี ถึงจะเพิ่มลงตะกร้าได้</div>
       <label class="chk"><input type="checkbox" id="kAct" ${k.active ? 'checked' : ''}> เปิดขาย</label>
       <div class="sec"><h4><span>ช่องสินค้า</span></h4>
-      <div class="hint" style="margin-bottom:8px">แต่ละช่องเลือกได้ว่ามีสินค้าอะไรให้ลูกค้าเลือกบ้าง ตั้งจำนวนชิ้นรวมของช่อง และจำนวนบรรทัดที่ให้เลือกผสมได้ (เช่น 2 ชิ้น 2 บรรทัด = กล้วย 1 + โกโก้ 1)</div>
+      <div class="hint" style="margin-bottom:8px">แต่ละช่องเลือกได้ว่ามีสินค้าอะไรให้เลือก และบังคับจำนวนชิ้นของช่องได้ (เว้นว่าง = ไม่บังคับ) · หน้าขายกด "เพิ่มช่อง" หรือ "เพิ่มบรรทัด" เองได้ โดยช่องที่เพิ่มเองเลือกได้ทุกสินค้าในแพ็กเกจนี้</div>
       ${k.slots.map((s, i) => `<div class="slot"><div class="hd"><span class="slotname">ช่อง ${letter(i)}</span><span style="flex:1"></span>${k.slots.length > 1 ? `<a data-del="${i}">ลบช่อง ${letter(i)}</a>` : ''}</div>
-        <div class="hd" style="margin-top:8px"><span>ชิ้นรวม</span><input id="sq${i}" data-ln="${i}" type="number" inputmode="numeric" value="${s.qty}" style="width:60px;flex:none"><span>บรรทัด</span><input id="sn${i}" data-ln="${i}" type="number" inputmode="numeric" value="${s.lines || 1}" style="width:60px;flex:none"></div>
-        <div class="hint" id="sh${i}">หน้าขายจะมี ${s.lines || 1} บรรทัดให้เลือกสินค้า + ใส่จำนวน รวมกันต้องได้ ${s.qty} ชิ้น</div>
+        <div class="hd" style="margin-top:8px"><span>จำนวนชิ้นของช่องนี้</span><input id="sq${i}" type="number" inputmode="numeric" value="${s.qty || ''}" placeholder="ไม่บังคับ" style="width:90px;flex:none"></div>
         <input data-filter="${i}" placeholder="🔍 กรองสินค้า" style="margin-top:8px" value="${esc(filters[i] || '')}">
         <div class="picks">${all.filter(x => !filters[i] || x.name.toLowerCase().includes(filters[i].toLowerCase()) || s.items.includes(x.id)).map(x => `<label><input type="checkbox" data-slot="${i}" value="${esc(x.id)}" ${s.items.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
         <div class="hint">เลือกแล้ว ${s.items.length} รายการ</div></div>`).join('')}
@@ -457,7 +464,6 @@ function editPackage(id, copy) {
       if (k.slots[i].items.length && !await confirmBox(`ลบช่อง ${letter(i)}?`, 'ช่องถัดไปจะเลื่อนขึ้นมาแทน (เช่น C จะกลายเป็น ' + letter(i) + ')', 'ลบช่อง', true)) return;
       keep(); k.slots.splice(i, 1); k.slots.forEach((s, j) => s.slot = letter(j)); render();
     });
-    el.querySelectorAll('[data-ln]').forEach(inp => inp.oninput = () => { const i = inp.dataset.ln; $('sh' + i).textContent = `หน้าขายจะมี ${Math.max(1, +$('sn' + i).value || 1)} บรรทัดให้เลือกสินค้า + ใส่จำนวน รวมกันต้องได้ ${+$('sq' + i).value || 1} ชิ้น`; });
     el.querySelectorAll('[data-slot]').forEach(c => c.onchange = () => { const s = k.slots[+c.dataset.slot]; s.items = c.checked ? [...new Set([...s.items, c.value])] : s.items.filter(x => x !== c.value); c.closest('.slot').querySelector('.hint:last-child').textContent = 'เลือกแล้ว ' + s.items.length + ' รายการ'; });
     el.querySelectorAll('[data-filter]').forEach(inp => inp.oninput = () => { keep(); filters[inp.dataset.filter] = inp.value; const pos = inp.selectionStart; render(); const n = el.querySelector(`[data-filter="${inp.dataset.filter}"]`); n.focus(); n.setSelectionRange(pos, pos); });
     // ปุ่มลบแพ็กเกจซ่อนไว้ก่อนตามที่ผู้ใช้ขอ (โค้ดยังอยู่ เปิดใหม่ได้โดยใส่ปุ่ม id="kDel" กลับ)
@@ -481,7 +487,7 @@ function editPackage(id, copy) {
       await waitUploads(b);
       if (isTemp(k.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
       try {
-        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, slots: k.slots });
+        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, total_qty: +k.total_qty || 0, slots: k.slots });
         POS.toast('บันทึกแล้ว'); closeM('mEdit'); load();
       } catch (e) { POS.toast(e.message, true); busy(b, false); }
     };
@@ -696,6 +702,17 @@ async function openDoc(req) {
   };
 }
 
+/* ---------- slip viewer ---------- */
+async function viewSlip(billId) {
+  $('slipTitle').textContent = 'รูปสลิป ' + billId;
+  $('slipBody').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลดรูป</div>';
+  $('mSlip').classList.add('on');
+  try {
+    const r = await POS.call('getSlip', { bill_id: billId });
+    $('slipBody').innerHTML = `<img src="data:${esc(r.mime)};base64,${r.data}" alt="สลิป"><div style="margin-top:8px"><a href="${esc(r.url)}" target="_blank" rel="noopener">เปิดใน Google Drive</a></div>`;
+  } catch (e) { $('slipBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
 /* ---------- activity log ---------- */
 let LOGS = [];
 const ACT_CLASS = { 'เพิ่ม': 'add', 'สมัคร': 'add', 'ลบ': 'del', 'แก้ไข': 'edit', 'ขาย': 'sale', 'เพิ่มสต็อก': 'stock', 'ลดสต็อก': 'stock', 'นับสต็อก': 'stock' };
@@ -706,15 +723,16 @@ async function loadLogs() {
 }
 function renderLogs() {
   const q = $('lQ').value.trim().toLowerCase(), f = $('lF').value;
-  const rows = LOGS.filter(l => (!f || (f === '@ลบ' ? l.action === 'ลบ' : l.target_type === f)) && (!q || [l.user, l.target_name, l.target_id, l.details, l.action].join(' ').toLowerCase().includes(q)));
+  const rows = LOGS.filter(l => (!f || (f === '@ลบ' ? l.action === 'ลบ' : f === '@สลิป' ? /มีรูปสลิป/.test(l.details) : l.target_type === f)) && (!q || [l.user, l.target_name, l.target_id, l.details, l.action].join(' ').toLowerCase().includes(q)));
   let html = '', day = null;
   rows.forEach(l => {
     const d = l.datetime.slice(0, 10);
     if (d !== day) { html += `<div class="grp">${esc(d)}</div>`; day = d; }
     html += `<div class="lrow"><div class="h"><span><span class="act ${ACT_CLASS[l.action] || ''}">${esc(l.action)}</span><b>${esc(l.target_type)}</b> ${esc(l.target_name || l.target_id)}</span><span class="who">${esc(l.datetime.slice(11, 16))}</span></div>
-      <div class="who">${esc(l.user)}</div>${l.details ? `<div class="d">${esc(l.details)}</div>` : ''}</div>`;
+      <div class="who">${esc(l.user)}</div>${l.details ? `<div class="d">${esc(l.details)}</div>` : ''}${l.action === 'ขาย' && /มีรูปสลิป/.test(l.details) ? `<button class="btn sm line" style="margin-top:8px" data-slip="${esc(l.target_id)}">📎 ดูรูปสลิป</button>` : ''}</div>`;
   });
   $('logList').innerHTML = html || '<div class="empty">ยังไม่มีประวัติ</div>';
+  $('logList').querySelectorAll('[data-slip]').forEach(b => b.onclick = () => viewSlip(b.dataset.slip));
 }
 $('lQ').oninput = renderLogs; $('lF').onchange = renderLogs;
 

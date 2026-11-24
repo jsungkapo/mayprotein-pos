@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
 <title>MayProtein POS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
 <link rel="stylesheet" href="styles.css">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
@@ -50,6 +51,8 @@ main{flex:1;overflow-y:auto;min-height:0}
 .slip .t{flex:1;font-size:13px;color:#555}
 .slip .t b{display:block;color:var(--text);font-size:14px}
 .slip .acts{display:flex;flex-direction:column;gap:6px}
+#mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
+#dayTable td,#dayTable th{font-size:13px;padding:6px 4px}
 .qrimg{display:block;max-width:280px;width:100%;margin:10px auto;border-radius:8px}
 .qrfull{position:fixed;inset:0;background:#fff;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 .qrfull.on{display:flex}
@@ -58,6 +61,10 @@ main{flex:1;overflow-y:auto;min-height:0}
 .kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
 .kpi div{background:#fff;border-radius:12px;padding:12px;font-size:13px;color:#666}
 .kpi b{display:block;font-size:22px;color:var(--pink);margin-top:2px}
+.pktotal{margin:10px 0 2px;padding:10px 12px;border-radius:10px;background:#f1f1f4;font-size:15px;text-align:center}
+.pktotal.ok{background:#e1f5ea;color:var(--ok)}.pktotal.over{background:#fde4e4;color:var(--bad)}
+.pkaddrow{display:inline-block;font-size:13px;margin-top:2px}
+.pkdel{margin-left:8px;font-size:13px;color:var(--bad)!important}
 .pkslot{background:#fafafa;border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px}
 .pkh{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
 .pkh span{color:var(--muted);font-size:13px}
@@ -118,17 +125,25 @@ tr.low td{color:var(--bad)}
   </div>
 
   <div class="page" id="p-sum">
-    <div class="kpi">
-      <div>ยอดขายสุทธิ<b id="kTotal">0</b></div>
-      <div>จำนวนบิล<b id="kBills">0</b></div>
-      <div>💵 เงินสด<b id="kCash">0</b></div>
-      <div>🏦 โอน<b id="kTr">0</b></div>
-      <div>📱 พร้อมเพย์<b id="kPP">0</b></div>
-      <div>ส่วนลดรวม<b id="kDisc">0</b></div>
+    <div class="box">
+      <div class="row"><div><label>ตั้งแต่วันที่</label><input type="date" id="rFrom"></div><div><label>ถึงวันที่</label><input type="date" id="rTo"></div></div>
+      <div class="chips" id="rQuick" style="margin:10px 0 8px"><div class="chip" data-q="today">วันนี้</div><div class="chip" data-q="yday">เมื่อวาน</div><div class="chip" data-q="7">7 วันล่าสุด</div><div class="chip" data-q="month">เดือนนี้</div></div>
+      <button class="btn" id="rGo">ดูสรุปยอดขาย</button>
     </div>
-    <div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
-    <div class="box"><b>สินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><table id="itTable"></table></div>
-    <button class="btn" onclick="downloadCsv()">⬇️ ดาวน์โหลดสรุปท้ายวัน (CSV)</button><br><br>
+    <div id="sumBody" style="display:none">
+      <div class="kpi">
+        <div style="grid-column:1/-1">ยอดขายสุทธิ<b id="kTotal">0</b><small id="kRange" style="color:#888"></small></div>
+        <div>จำนวนบิล<b id="kBills">0</b></div>
+        <div>ส่วนลดรวม<b id="kDisc">0</b></div>
+        <div>💵 เงินสด<b id="kCash">0</b></div>
+        <div>🏦 โอน<b id="kTr">0</b></div>
+      </div>
+      <div class="box"><b>สรุปรายวัน</b><table id="dayTable"></table></div>
+      <div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
+      <div class="box"><b>สินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><table id="itTable"></table></div>
+      <button class="btn" id="rPdf">📄 ดาวน์โหลดรายงาน PDF</button><br><br>
+      <button class="btn line" onclick="downloadCsv()">⬇️ ดาวน์โหลดข้อมูลบิล (CSV)</button><br><br>
+    </div>
   </div>
 </main>
 
@@ -154,7 +169,7 @@ tr.low td{color:var(--bad)}
   <div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()" style="flex:none;width:90px"><option value="baht">บาท</option><option value="percent">%</option></select></div>
   <label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
   <label>วิธีชำระเงิน</label>
-  <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน</button><button data-m="promptpay">📱 พร้อมเพย์</button></div>
+  <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน / QR</button></div>
   <div id="qrBox" style="display:none;text-align:center"></div>
   <div id="slipBox" style="display:none"></div>
   <input type="file" id="slipIn" accept="image/*" capture="environment" style="display:none">
@@ -163,12 +178,25 @@ tr.low td{color:var(--bad)}
   <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
 </div></div>
 <div class="qrfull" id="qrFull" onclick="this.classList.remove('on')"></div>
+<div class="modal" id="mAsk"><div class="sheet">
+  <h3>ออกรายงานสรุปยอดขาย</h3>
+  <label>เป็นงานขายอะไร (จะแสดงเป็นหัวรายงาน)</label><input id="askTitle" placeholder="เช่น ATM">
+  <div class="hint" id="askHint" style="font-size:12px;color:#888;margin-top:6px"></div>
+  <br><button class="btn" id="askOk">สร้าง PDF</button><br><br><button class="btn g" onclick="closeM('mAsk')">ยกเลิก</button>
+</div></div>
+<div class="modal" id="mSlip"><div class="sheet" style="text-align:center">
+  <h3 id="slipTitle">รูปสลิป</h3>
+  <div id="slipBody"></div>
+  <br><button class="btn g" onclick="closeM('mSlip')">ปิด</button>
+</div></div>
 
 <script src="config.js"></script>
 <script src="api.js"></script>
+<script src="requisition.js"></script>
+<script src="report.js"></script>
 <script>
 const esc = POS.esc, money = POS.money;
-const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '📱 พร้อมเพย์' };
+const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
 const EMOJI = { 'โปรตีน': '🥤', 'พรีเวิร์กเอาต์': '⚡', 'เสื้อผ้า': '👕', 'อุปกรณ์': '🧦', 'อาหารเสริม': '💊' };
 let me = null, cat = { products: [], variants: [], packages: [], settings: {} };
 let cart = [], chip = 'ทั้งหมด', method = 'cash', today = { bills: [] }, clientId = null, paying = false;
@@ -239,7 +267,8 @@ function tab(k, b) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + k));
   $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   $('cartPanel').style.display = k === 'sell' ? 'flex' : 'none';
-  if (k === 'bills' || k === 'sum') loadToday();
+  if (k === 'bills') loadToday();
+  if (k === 'sum') initSum();
 }
 
 /* ---------- sell ---------- */
@@ -280,52 +309,82 @@ function openVar(p) {
 }
 function addVar(vid) { const v = V(vid); closeM('mVar'); addLine({ key: vid, type: 'variant', id: vid, pid: v.product_id, name: vName(v), price: vPrice(v) }); }
 
-/* ---------- package picker: แต่ละช่องมีหลายบรรทัด (เลือกสินค้า + จำนวน) ---------- */
+/* ---------- package picker ----------
+ * ช่องที่ตั้งไว้หลังบ้าน (จำกัดสินค้า และจำนวนถ้ากำหนดไว้) + กด "เพิ่มช่อง" หน้าร้านได้ (เลือกสินค้าใดก็ได้ในแพ็กเกจ)
+ * ถ้าแพ็กเกจกำหนด "จำนวนชิ้นทั้งหมด" ต้องเลือกให้ครบพอดี */
 let pk = null;
+const LETTER = i => i < 26 ? String.fromCharCode(65 + i) : 'S' + (i + 1);
 function openPk(id) {
   const k = cat.packages.find(x => x.package_id === id);
-  const rows = {};
-  k.slots.forEach(s => {
-    const n = Math.max(1, s.lines || 1);
-    rows[s.slot] = Array.from({ length: n }, (_, i) => ({ id: s.items.length === 1 && i === 0 ? s.items[0] : '', qty: i === 0 ? s.qty : 0 }));
-  });
-  pk = { k, rows };
+  const union = [...new Set(k.slots.flatMap(s => s.items))];
+  const slots = k.slots.map(s => ({
+    name: s.slot, qty: s.qty || 0, items: s.items, fixed: true,
+    rows: Array.from({ length: Math.max(1, s.lines || 1) }, (_, i) => ({ id: s.items.length === 1 && i === 0 ? s.items[0] : '', qty: i === 0 ? (s.qty || 0) : 0 }))
+  }));
+  pk = { k, union, slots };
   renderPk();
   $('mPk').classList.add('on');
+  $('mPk').querySelector('.sheet').scrollTop = 0;
 }
-const slotSum = s => pk.rows[s.slot].reduce((a, r) => a + (r.qty || 0), 0);
+const rowsSum = rows => rows.reduce((a, r) => a + (r.id ? r.qty || 0 : 0), 0);
+const pkTotal = () => pk.slots.reduce((a, s) => a + rowsSum(s.rows), 0);
+function nextSlotName() { const used = pk.slots.map(s => s.name); let i = 0; while (used.includes(LETTER(i))) i++; return LETTER(i); }
 function renderPk() {
-  const k = pk.k;
-  $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}` + k.slots.map(s => {
-    const sum = slotSum(s), okc = sum === s.qty ? 'ok' : sum > s.qty ? 'over' : '';
-    return `<div class="pkslot"><div class="pkh"><b>ช่อง ${esc(s.slot)}</b><span>เลือกรวม ${s.qty} ชิ้น</span><span class="pkst ${okc}">${sum}/${s.qty}${okc === 'ok' ? ' ✓' : ''}</span></div>` +
-      pk.rows[s.slot].map((r, i) => `<div class="pkrow"><select data-s="${esc(s.slot)}" data-i="${i}"><option value="">— เลือกสินค้า —</option>${s.items.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty ? '' : 'zero'}" data-s="${esc(s.slot)}" data-i="${i}">${r.qty}</button></div>`).join('') + '</div>';
-  }).join('') + `<br><button class="btn" onclick="addPk()">เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
+  const k = pk.k, total = pkTotal(), need = k.total_qty || 0;
+  const tcls = need ? (total === need ? 'ok' : total > need ? 'over' : '') : '';
+  $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}
+    <div class="pktotal ${tcls}">${need ? `เลือกแล้ว <b>${total}</b> / ${need} ชิ้น${tcls === 'ok' ? ' ✓' : tcls === 'over' ? ' (เกิน)' : ` · ขาดอีก ${need - total}`}` : `เลือกแล้ว <b>${total}</b> ชิ้น`}</div>` +
+    pk.slots.map((s, si) => {
+      const sum = rowsSum(s.rows), okc = s.qty ? (sum === s.qty ? 'ok' : sum > s.qty ? 'over' : '') : '';
+      return `<div class="pkslot"><div class="pkh"><b>ช่อง ${esc(s.name)}</b><span>${s.qty ? `ต้องเลือก ${s.qty} ชิ้น` : s.fixed ? 'ไม่จำกัดจำนวน' : 'ช่องที่เพิ่มเอง'}</span>${s.qty ? `<span class="pkst ${okc}">${sum}/${s.qty}${okc === 'ok' ? ' ✓' : ''}</span>` : ''}${s.fixed ? '' : `<a class="pkdel" data-del="${si}">ลบช่อง</a>`}</div>` +
+        s.rows.map((r, ri) => `<div class="pkrow"><select data-s="${si}" data-i="${ri}"><option value="">— เลือกสินค้า —</option>${s.items.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-s="${si}" data-i="${ri}">${r.qty}</button></div>`).join('') +
+        `<a class="pkaddrow" data-row="${si}">+ เพิ่มบรรทัดในช่อง ${esc(s.name)}</a></div>`;
+    }).join('') +
+    `<button class="btn line" id="pkAddSlot" style="margin-top:10px;text-align:center">+ เพิ่มช่อง ${nextSlotName()}</button>
+    <br><br><button class="btn" onclick="addPk()">เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
+  const remain = s => {
+    const need2 = pk.k.total_qty ? pk.k.total_qty - pkTotal() : Infinity;
+    const slotLeft = s.qty ? s.qty - rowsSum(s.rows) : Infinity;
+    const v = Math.min(need2, slotLeft);
+    return v === Infinity ? 1 : Math.max(0, v);
+  };
   $('pkSheet').querySelectorAll('select[data-s]').forEach(el => el.onchange = () => {
-    const s = pk.k.slots.find(x => x.slot === el.dataset.s), r = pk.rows[s.slot][+el.dataset.i];
-    r.id = el.value;
-    if (r.id && !r.qty) r.qty = Math.max(0, s.qty - slotSum(s));
+    const s = pk.slots[+el.dataset.s], r = s.rows[+el.dataset.i];
+    const had = !!r.id; r.id = el.value;
+    if (r.id && (!had || !r.qty)) { r.qty = 0; r.qty = remain(s) || 1; }
     if (!r.id) r.qty = 0;
     renderPk();
   });
   $('pkSheet').querySelectorAll('.qbtn').forEach(b => b.onclick = () => {
-    const s = pk.k.slots.find(x => x.slot === b.dataset.s), r = pk.rows[s.slot][+b.dataset.i];
-    numpad(`ช่อง ${s.slot} · ${r.id ? itemName(r.id) : 'จำนวน'}`, r.qty, v => { r.qty = v; renderPk(); });
+    const s = pk.slots[+b.dataset.s], r = s.rows[+b.dataset.i];
+    numpad(`ช่อง ${s.name} · ${r.id ? itemName(r.id) : 'จำนวน'}`, r.qty, v => { r.qty = v; renderPk(); });
   });
+  $('pkSheet').querySelectorAll('[data-row]').forEach(a => a.onclick = () => { pk.slots[+a.dataset.row].rows.push({ id: '', qty: 0 }); renderPk(); });
+  $('pkSheet').querySelectorAll('[data-del]').forEach(a => a.onclick = () => { pk.slots.splice(+a.dataset.del, 1); renderPk(); });
+  $('pkAddSlot').onclick = () => {
+    pk.slots.push({ name: nextSlotName(), qty: 0, items: pk.union, fixed: false, rows: [{ id: '', qty: 0 }] });
+    renderPk();
+    const last = $('pkSheet').querySelectorAll('.pkslot'); last[last.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 }
 function addPk() {
   const k = pk.k, selections = {}, desc = [];
-  for (const s of k.slots) {
+  let total = 0;
+  for (const s of pk.slots) {
     const merged = {};
-    for (const r of pk.rows[s.slot]) {
-      if (r.qty > 0 && !r.id) return POS.toast(`ช่อง ${s.slot}: เลือกสินค้าให้บรรทัดที่ใส่จำนวนไว้`, true);
+    for (const r of s.rows) {
+      if (r.qty > 0 && !r.id) return POS.toast(`ช่อง ${s.name}: เลือกสินค้าให้บรรทัดที่ใส่จำนวนไว้`, true);
       if (r.id && r.qty > 0) merged[r.id] = (merged[r.id] || 0) + r.qty;
     }
     const sum = Object.values(merged).reduce((a, b) => a + b, 0);
-    if (sum !== s.qty) return POS.toast(`ช่อง ${s.slot} ต้องเลือกรวม ${s.qty} ชิ้น (ตอนนี้ ${sum})`, true);
-    selections[s.slot] = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
-    desc.push(s.slot + ': ' + selections[s.slot].map(x => itemName(x.id).replace(/^May Protein /, '') + (s.qty > 1 ? '×' + x.qty : '')).join(', '));
+    if (s.qty && sum !== s.qty) return POS.toast(`ช่อง ${s.name} ต้องเลือกรวม ${s.qty} ชิ้น (ตอนนี้ ${sum})`, true);
+    total += sum;
+    if (!sum) continue;
+    selections[s.name] = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
+    desc.push(s.name + ': ' + selections[s.name].map(x => itemName(x.id).replace(/^May Protein /, '') + (x.qty > 1 || s.qty > 1 ? '×' + x.qty : '')).join(', '));
   }
+  if (k.total_qty && total !== k.total_qty) return POS.toast(`แพ็กเกจนี้ต้องเลือกรวม ${k.total_qty} ชิ้น (ตอนนี้ ${total})`, true);
+  if (!total) return POS.toast('ยังไม่ได้เลือกสินค้า', true);
   closeM('mPk');
   addLine({ key: k.package_id + '|' + JSON.stringify(selections), type: 'package', id: k.package_id, name: k.name, price: k.price, selections, desc: desc.join(' · ') });
 }
@@ -364,7 +423,7 @@ function openCheckout() { if (!cart.length) return; clientId = POS.uuid(); $('mP
 
 /* ---------- รูปสลิป (โอน / พร้อมเพย์) ---------- */
 let slip = null;
-const needsSlip = () => method === 'transfer' || method === 'promptpay';
+const needsSlip = () => method === 'transfer';
 function renderSlip() {
   const box = $('slipBox');
   if (!needsSlip()) { box.style.display = 'none'; return; }
@@ -392,10 +451,10 @@ function calc() {
 }
 function renderQr() {
   const box = $('qrBox');
-  if (method !== 'promptpay') { box.style.display = 'none'; return; }
+  if (method !== 'transfer') { box.style.display = 'none'; return; }
   box.style.display = 'block';
   const url = cat.settings.promptpay_qr_image_url;
-  box.innerHTML = url ? `<img class="qrimg" src="${esc(url)}" alt="QR"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty">ยังไม่ได้อัปโหลดรูป QR (แอดมินตั้งค่าได้ที่หลังบ้าน)</div>';
+  box.innerHTML = url ? `<img class="qrimg" src="${esc(url)}" alt="QR"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty" style="padding:6px 0">ยังไม่ได้อัปโหลดรูป QR พร้อมเพย์ (ตั้งค่าได้ที่หลังบ้าน) · ลูกค้าโอนเข้าบัญชีได้ตามปกติ</div>';
 }
 function showQrFull() {
   const url = cat.settings.promptpay_qr_image_url;
@@ -441,48 +500,113 @@ function receiptHtml(b) {
   <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
   <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
   ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}
-  ${b.slip_url ? `<div class="r"><small>📎 ${POS.isAdmin() ? `<a href="${esc(b.slip_url)}" target="_blank" rel="noopener">ดูรูปสลิป</a>` : 'เก็บรูปสลิปแล้ว'}</small></div>` : ''}</div>`;
+  ${b.slip_url ? `<div class="r"><small>📎 ${POS.isAdmin() ? `<a onclick="viewSlip('${esc(b.bill_id)}')">ดูรูปสลิป</a>` : 'เก็บรูปสลิปแล้ว'}</small></div>` : ''}</div>`;
 }
 
-/* ---------- today (admin) ---------- */
+/* ---------- today bills (admin) ---------- */
 async function loadToday(force) {
   if (!POS.isAdmin()) return;
   if (!today.bills.length || force) $('billList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
-  try { today = await POS.call('todaySales'); renderBills(); renderSum(); }
+  try { today = await POS.call('todaySales'); renderBills(); }
   catch (e) { POS.toast(e.message, true); }
 }
 function renderBills() {
   const bs = today.bills;
   $('bCnt').textContent = bs.length; $('bSum').textContent = money(bs.reduce((a, b) => a + b.total, 0));
-  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span><br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+  $('billList').innerHTML = bs.map(b => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b><span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? '<span class="tag">📎 สลิป</span>' : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b>${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
 }
-function aggregate() {
-  const bs = today.bills, by = m => bs.filter(b => b.payment_method === m).reduce((a, b) => a + b.total, 0);
-  const pk = {}, it = {};
-  bs.forEach(b => b.items.forEach(i => {
-    if (i.package_id && !i.slot) { pk[i.item_name] = (pk[i.item_name] || 0) + i.qty; return; }
-    it[i.item_name] = (it[i.item_name] || 0) + i.qty;
-  }));
-  return { total: bs.reduce((a, b) => a + b.total, 0), disc: bs.reduce((a, b) => a + b.discount_amount, 0), cash: by('cash'), tr: by('transfer'), pp: by('promptpay'), pk, it };
+
+/* ---------- slip viewer ---------- */
+async function viewSlip(billId) {
+  $('slipTitle').textContent = 'รูปสลิป ' + billId;
+  $('slipBody').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลดรูป</div>';
+  $('mSlip').classList.add('on');
+  try {
+    const r = await POS.call('getSlip', { bill_id: billId });
+    $('slipBody').innerHTML = `<img src="data:${esc(r.mime)};base64,${r.data}" alt="สลิป"><div style="margin-top:8px"><a href="${esc(r.url)}" target="_blank" rel="noopener">เปิดใน Google Drive</a></div>`;
+  } catch (e) { $('slipBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ---------- sales summary by date range (admin) ---------- */
+let sum = null;
+const iso = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+function initSum() {
+  if ($('rFrom').value) return;
+  const t = iso(new Date()); $('rFrom').value = t; $('rTo').value = t;
+  $('rQuick').querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    const now = new Date(), q = c.dataset.q;
+    let f = now, t2 = now;
+    if (q === 'yday') { f = t2 = new Date(now.getTime() - 86400000); }
+    if (q === '7') f = new Date(now.getTime() - 6 * 86400000);
+    if (q === 'month') f = new Date(now.getFullYear(), now.getMonth(), 1);
+    $('rFrom').value = iso(f); $('rTo').value = iso(t2);
+    $('rQuick').querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
+    loadSum();
+  });
+  $('rGo').onclick = loadSum;
+  $('rPdf').onclick = askReport;
+  loadSum();
+}
+async function loadSum() {
+  let from = $('rFrom').value, to = $('rTo').value || from;
+  if (!from) return POS.toast('เลือกวันที่เริ่ม', true);
+  if (to < from) { [from, to] = [to, from]; $('rFrom').value = from; $('rTo').value = to; }
+  const b = $('rGo'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังโหลด';
+  try { sum = await POS.call('todaySales', { from, to }); renderSum(); }
+  catch (e) { POS.toast(e.message, true); }
+  b.disabled = false; b.textContent = 'ดูสรุปยอดขาย';
 }
 function renderSum() {
-  const g = aggregate();
-  $('kTotal').textContent = money(g.total); $('kBills').textContent = today.bills.length;
-  $('kCash').textContent = money(g.cash); $('kTr').textContent = money(g.tr); $('kPP').textContent = money(g.pp); $('kDisc').textContent = money(g.disc);
+  const g = SalesReport.aggregate(sum.bills);
+  $('sumBody').style.display = 'block';
+  $('kTotal').textContent = money(g.net) + ' ฿';
+  $('kRange').textContent = sum.from === sum.to ? PdfKit.thaiDate(sum.from) : `${PdfKit.thaiDate(sum.from)} – ${PdfKit.thaiDate(sum.to)}`;
+  $('kBills').textContent = g.bills; $('kCash').textContent = money(g.cash); $('kTr').textContent = money(g.transfer); $('kDisc').textContent = money(g.discount);
+  $('dayTable').innerHTML = '<tr><th>วันที่</th><th class="n">บิล</th><th class="n">เงินสด</th><th class="n">โอน</th><th class="n">สุทธิ</th></tr>' +
+    (g.days.map(d => `<tr><td>${esc(PdfKit.thaiDate(d.date))}</td><td class="n">${d.bills}</td><td class="n">${money(d.cash)}</td><td class="n">${money(d.transfer)}</td><td class="n"><b>${money(d.net)}</b></td></tr>`).join('') || '<tr><td colspan="5" class="empty">ไม่มีการขายในช่วงนี้</td></tr>') +
+    (g.days.length > 1 ? `<tr><td><b>รวม</b></td><td class="n"><b>${g.bills}</b></td><td class="n"><b>${money(g.cash)}</b></td><td class="n"><b>${money(g.transfer)}</b></td><td class="n"><b>${money(g.net)}</b></td></tr>` : '');
   const rows = o => Object.entries(o).sort((a, b) => b[1] - a[1]);
-  $('pkTable').innerHTML = rows(g.pk).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v} เซต</td></tr>`).join('') || '<tr><td>-</td></tr>';
-  $('itTable').innerHTML = rows(g.it).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join('') || '<tr><td>-</td></tr>';
+  $('pkTable').innerHTML = rows(g.packages).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v} เซต</td></tr>`).join('') || '<tr><td>-</td></tr>';
+  $('itTable').innerHTML = rows(g.items).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join('') || '<tr><td>-</td></tr>';
+}
+function askReport() {
+  if (!sum) return;
+  const events = [...new Set(sum.bills.map(b => b.event_name).filter(Boolean))];
+  $('askTitle').value = events.length === 1 ? events[0] : (POS.pref('event') || '');
+  $('askHint').textContent = events.length ? 'ชื่องานที่บันทึกไว้กับบิลในช่วงนี้: ' + events.join(', ') : '';
+  $('mAsk').classList.add('on');
+  setTimeout(() => $('askTitle').focus(), 100);
+  $('askOk').onclick = async () => {
+    const title = $('askTitle').value.trim();
+    if (!title) return POS.toast('ใส่ชื่องานขายก่อน เช่น ATM', true);
+    const b = $('askOk'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังสร้าง PDF';
+    try {
+      const blob = await SalesReport.pdf({ title, from: sum.from, to: sum.to, bills: sum.bills, shop: cat.settings.shop_name, by: me.display_name, printedAt: new Date().toLocaleString('th-TH') });
+      const name = `สรุปยอดขาย-${title.replace(/[\\/:*?"<>|]/g, '')}-${sum.from}${sum.to !== sum.from ? '_' + sum.to : ''}.pdf`;
+      const file = new File([blob], name, { type: 'application/pdf' });
+      closeM('mAsk');
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+        try { await navigator.share({ files: [file], title: name }); } catch (e) {}
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      }
+    } catch (e) { POS.toast(e.message, true); }
+    b.disabled = false; b.textContent = 'สร้าง PDF';
+  };
 }
 function downloadCsv() {
-  const g = aggregate(), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const out = [['สรุปยอดขาย', today.date], ['ยอดขายสุทธิ', g.total], ['จำนวนบิล', today.bills.length], ['เงินสด', g.cash], ['โอน', g.tr], ['พร้อมเพย์', g.pp], ['ส่วนลดรวม', g.disc], [],
-    ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.pk), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.it), [],
+  if (!sum) return;
+  const g = SalesReport.aggregate(sum.bills), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const out = [['สรุปยอดขาย', sum.from, sum.to], ['ยอดขายสุทธิ', g.net], ['จำนวนบิล', g.bills], ['เงินสด', g.cash], ['โอน', g.transfer], ['ส่วนลดรวม', g.discount], [],
+    ['วันที่', 'บิล', 'เงินสด', 'โอน', 'ส่วนลด', 'สุทธิ'], ...g.days.map(d => [d.date, d.bills, d.cash, d.transfer, d.discount, d.net]), [],
+    ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.packages), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.items), [],
     ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note', 'slip_url']];
-  today.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, b.payment_method, i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url])));
+  sum.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, SalesReport.normMethod(b.payment_method), i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url])));
   const csv = '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = `mayprotein-sales-${today.date}.csv`;
+  a.download = `mayprotein-sales-${sum.from}${sum.to !== sum.from ? '_' + sum.to : ''}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
 }
 
