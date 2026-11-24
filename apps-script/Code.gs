@@ -15,7 +15,7 @@ const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active'],
-  PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items'],
+  PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
   Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id'],
   SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
@@ -102,7 +102,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v2')) return;
+  if (cache.get('setup_ok_v3')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -125,7 +125,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v2', '1', 21600);
+  cache.put('setup_ok_v3', '1', 21600);
 }
 
 function headers_(name) {
@@ -362,7 +362,7 @@ function loadPackages_() {
       image_url: str_(r.image_url), active: bool_(r.active),
       slots: slots.filter(function (s) { return str_(s.package_id) === str_(r.package_id); }).map(function (s) {
         return {
-          slot: str_(s.slot), qty: num_(s.qty) || 1,
+          slot: str_(s.slot), qty: num_(s.qty) || 1, lines: Math.max(1, num_(s.lines) || 1),
           items: str_(s.allowed_items).split(',').map(function (x) { return x.trim(); }).filter(String)
         };
       })
@@ -499,12 +499,24 @@ function createSale_(p, user) {
         items.push({ item_id: k.package_id, item_name: k.name, qty: qty, unit_price: k.price, line_total: k.price * qty, package_id: k.package_id, package_set_no: setNo, slot: '' });
         subtotal += k.price * qty;
         k.slots.forEach(function (s) {
-          const chosen = str_((ln.selections || {})[s.slot]);
-          if (!chosen || s.items.indexOf(chosen) < 0) throw new Error('เลือกสินค้าช่อง ' + s.slot + ' ของ ' + k.name + ' ไม่ถูกต้อง');
-          const it = idx[chosen];
-          if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
-          items.push({ item_id: chosen, item_name: it.name, qty: qty * s.qty, unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: s.slot });
-          deductions.push([chosen, qty * s.qty]);
+          // รูปแบบใหม่: [{ id, qty }, ...] หลายบรรทัด / รูปแบบเดิม: 'P001' (ได้ครบ s.qty ชิ้น)
+          let picks = (ln.selections || {})[s.slot];
+          if (!Array.isArray(picks)) picks = picks ? [{ id: picks, qty: s.qty }] : [];
+          const merged = {};
+          picks.forEach(function (x) {
+            const pid = str_(x && x.id), q = Math.round(num_(x && x.qty));
+            if (pid && q > 0) merged[pid] = (merged[pid] || 0) + q;
+          });
+          const ids = Object.keys(merged);
+          const sum = ids.reduce(function (a, i) { return a + merged[i]; }, 0);
+          if (sum !== s.qty) throw new Error('ช่อง ' + s.slot + ' ของ ' + k.name + ' ต้องเลือกรวม ' + s.qty + ' ชิ้น (เลือกมา ' + sum + ')');
+          ids.forEach(function (chosen) {
+            if (s.items.indexOf(chosen) < 0) throw new Error('เลือกสินค้าช่อง ' + s.slot + ' ของ ' + k.name + ' ไม่ถูกต้อง');
+            const it = idx[chosen];
+            if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
+            items.push({ item_id: chosen, item_name: it.name, qty: qty * merged[chosen], unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: s.slot });
+            deductions.push([chosen, qty * merged[chosen]]);
+          });
         });
       } else {
         const id = str_(ln.id);
@@ -694,7 +706,7 @@ function savePackage_(p, user) {
   const name = str_(p.name);
   if (!name) throw new Error('กรุณาใส่ชื่อแพ็กเกจ');
   const slots = (p.slots || []).map(function (s) {
-    return { slot: str_(s.slot), qty: Math.max(1, Math.round(num_(s.qty) || 1)), items: (s.items || []).map(str_).filter(String) };
+    return { slot: str_(s.slot), qty: Math.max(1, Math.round(num_(s.qty) || 1)), lines: Math.min(20, Math.max(1, Math.round(num_(s.lines) || 1))), items: (s.items || []).map(str_).filter(String) };
   });
   if (!slots.length) throw new Error('แพ็กเกจต้องมีอย่างน้อย 1 ช่อง');
   slots.forEach(function (s) { if (!s.slot || !s.items.length) throw new Error('ทุกช่องต้องมีชื่อและสินค้าอย่างน้อย 1 รายการ'); });
@@ -702,7 +714,7 @@ function savePackage_(p, user) {
     const rows = readTable_('Packages');
     let id = str_(p.package_id);
     const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false };
-    const slotText = function (list) { return list.map(function (x) { return x.slot + (x.qty > 1 ? '×' + x.qty : '') + '[' + x.items.join(',') + ']'; }).join(' '); };
+    const slotText = function (list) { return list.map(function (x) { return x.slot + (x.qty > 1 ? '×' + x.qty : '') + (x.lines > 1 ? ' ' + x.lines + 'บรรทัด' : '') + '[' + x.items.join(',') + ']'; }).join(' '); };
     let logDetail;
     if (id) {
       const r = rows.filter(function (x) { return str_(x.package_id) === id; })[0];
@@ -721,7 +733,7 @@ function savePackage_(p, user) {
     if (logDetail[1]) log_(user, logDetail[0], 'แพ็กเกจ', id, name, logDetail[1]);
     const s = sh_('PackageSlots');
     readTable_('PackageSlots').filter(function (r) { return str_(r.package_id) === id; }).reverse().forEach(function (r) { s.deleteRow(r._row); });
-    appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(',') }; }));
+    appendRows_('PackageSlots', slots.map(function (x) { return { package_id: id, slot: x.slot, qty: x.qty, allowed_items: x.items.join(','), lines: x.lines }; }));
     catalogChanged_();
     return { package_id: id };
   });
@@ -875,7 +887,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v2');
+  CacheService.getScriptCache().remove('setup_ok_v3');
   ensureSetup_();
   imageFolder_();
   Logger.log('Setup done. Users so far: ' + readTable_('Users').length);
