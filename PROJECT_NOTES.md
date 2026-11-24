@@ -30,7 +30,7 @@
 - [x] หลังบ้าน admin.html
 - [x] PWA manifest + ไอคอน
 - [x] ดาวน์โหลดสรุปท้ายวัน CSV
-- [ ] ผู้ใช้ติดตั้ง Apps Script + ใส่ URL ใน config.js (รอ URL จากผู้ใช้)
+- [x] ติดตั้ง Apps Script แล้ว, URL อยู่ใน config.js
 
 ## ประวัติ
 - 2026-11-24: สร้าง repo, เปิด Pages, inputmode ช่องส่วนลด, v3 (หน้าขายสำเร็จ + แท็บรายการขาย)
