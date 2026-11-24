@@ -45,6 +45,11 @@ main{flex:1;overflow-y:auto;min-height:0}
 .pay button{flex:1;padding:12px 4px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px}
 .pay button.on{border-color:var(--pink);background:var(--pink-soft);font-weight:700}
 .tot{display:flex;justify-content:space-between;font-size:20px;font-weight:700;margin:14px 0}
+.slip{display:flex;align-items:center;gap:10px;background:#f6f7f9;border-radius:10px;padding:10px;margin-top:10px}
+.slip img{width:64px;height:84px;object-fit:cover;border-radius:6px;flex:none;background:#ddd}
+.slip .t{flex:1;font-size:13px;color:#555}
+.slip .t b{display:block;color:var(--text);font-size:14px}
+.slip .acts{display:flex;flex-direction:column;gap:6px}
 .qrimg{display:block;max-width:280px;width:100%;margin:10px auto;border-radius:8px}
 .qrfull{position:fixed;inset:0;background:#fff;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 .qrfull.on{display:flex}
@@ -151,6 +156,8 @@ tr.low td{color:var(--bad)}
   <label>วิธีชำระเงิน</label>
   <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน</button><button data-m="promptpay">📱 พร้อมเพย์</button></div>
   <div id="qrBox" style="display:none;text-align:center"></div>
+  <div id="slipBox" style="display:none"></div>
+  <input type="file" id="slipIn" accept="image/*" capture="environment" style="display:none">
   <div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
   <button class="btn" id="payBtn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
   <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
@@ -192,7 +199,7 @@ function boot() {
   $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
   document.addEventListener('click', () => $('menu').classList.remove('on'));
   $('q').oninput = renderGrid;
-  document.querySelectorAll('#pay button').forEach(b => b.onclick = () => { method = b.dataset.m; document.querySelectorAll('#pay button').forEach(x => x.classList.toggle('on', x === b)); renderQr(); });
+  document.querySelectorAll('#pay button').forEach(b => b.onclick = () => { method = b.dataset.m; document.querySelectorAll('#pay button').forEach(x => x.classList.toggle('on', x === b)); renderQr(); renderSlip(); });
   renderCart();
   loadCatalog();
 }
@@ -353,7 +360,29 @@ function renderCart() {
 function closeM(m) { $(m).classList.remove('on'); }
 
 /* ---------- checkout ---------- */
-function openCheckout() { if (!cart.length) return; clientId = POS.uuid(); $('mPay').classList.add('on'); calc(); renderQr(); }
+function openCheckout() { if (!cart.length) return; clientId = POS.uuid(); $('mPay').classList.add('on'); calc(); renderQr(); renderSlip(); }
+
+/* ---------- รูปสลิป (โอน / พร้อมเพย์) ---------- */
+let slip = null;
+const needsSlip = () => method === 'transfer' || method === 'promptpay';
+function renderSlip() {
+  const box = $('slipBox');
+  if (!needsSlip()) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = slip
+    ? `<div class="slip"><img src="${slip.preview}" alt="สลิป"><div class="t"><b>✅ ถ่ายรูปสลิปแล้ว</b>จะบันทึกไว้กับบิลนี้</div><div class="acts"><button class="btn sm line" onclick="takeSlip()">ถ่ายใหม่</button><button class="btn sm g" onclick="slip=null;renderSlip()">ลบ</button></div></div>`
+    : `<div class="slip"><div class="t"><b>📷 รูปสลิปการโอน</b>ถ่ายรูปสลิปบนมือถือลูกค้าเก็บไว้เป็นหลักฐาน (ถ้ายังไม่ถ่าย จะเปิดกล้องให้ตอนกดยืนยัน)</div><button class="btn sm" onclick="takeSlip()">ถ่ายรูป</button></div>`;
+}
+async function takeSlip() {
+  const file = await POS.pickFile($('slipIn'));
+  if (!file) return false;
+  try {
+    const data = await POS.jpegImage(file, 1280, 0.7);
+    slip = { data, preview: 'data:image/jpeg;base64,' + data };
+    renderSlip();
+    return true;
+  } catch (e) { POS.toast(e.message, true); return false; }
+}
 function calc() {
   const s = cartTotal(), d = Math.max(0, +$('disc').value || 0), t = $('dtype').value;
   const da = Math.min(s, t === 'percent' ? s * Math.min(d, 100) / 100 : d);
@@ -375,18 +404,24 @@ function showQrFull() {
 }
 async function pay() {
   if (paying) return;
+  if (needsSlip() && !slip) {
+    // เปิดกล้องทันทีจากการกดปุ่มยืนยัน
+    const got = await takeSlip();
+    if (!got && !confirm('ยังไม่มีรูปสลิป บันทึกการขายต่อเลยไหม?')) return;
+  }
   const { net } = calc();
   paying = true; $('payBtn').disabled = true; $('payBtn').innerHTML = '<span class="spin"></span> กำลังบันทึก';
   try {
     const r = await POS.call('createSale', {
       client_id: clientId, event_name: POS.pref('event') || '', payment_method: method,
       discount_type: $('dtype').value, discount_value: +$('disc').value || 0, note: $('note').value.trim(),
+      slip_data: needsSlip() && slip ? slip.data : '',
       lines: cart.map(c => ({ type: c.type, id: c.id, qty: c.qty, selections: c.selections }))
     });
     const b = r.bill;
     if (Math.abs(b.total - net) > 0.01) POS.toast('ยอดสุทธิจากเซิร์ฟเวอร์: ' + money(b.total) + ' บาท');
     cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
-    $('disc').value = 0; $('note').value = ''; clientId = null;
+    $('disc').value = 0; $('note').value = ''; clientId = null; slip = null;
     $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
     $('mOk').classList.add('on');
     b.items.forEach(i => { if (i.package_id && !i.slot) return; const p = P(i.item_id), v = V(i.item_id); if (p) p.stock_qty -= i.qty; if (v) v.stock_qty -= i.qty; });
@@ -405,7 +440,8 @@ function receiptHtml(b) {
   ${b.discount_amount ? `<div class="r"><span>ส่วนลด${b.discount_type === 'percent' ? ' ' + b.discount_value + '%' : ''}</span><span>-${money(b.discount_amount)}฿</span></div>` : ''}
   <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
   <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
-  ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}</div>`;
+  ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}
+  ${b.slip_url ? `<div class="r"><small>📎 ${POS.isAdmin() ? `<a href="${esc(b.slip_url)}" target="_blank" rel="noopener">ดูรูปสลิป</a>` : 'เก็บรูปสลิปแล้ว'}</small></div>` : ''}</div>`;
 }
 
 /* ---------- today (admin) ---------- */
@@ -441,8 +477,8 @@ function downloadCsv() {
   const g = aggregate(), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const out = [['สรุปยอดขาย', today.date], ['ยอดขายสุทธิ', g.total], ['จำนวนบิล', today.bills.length], ['เงินสด', g.cash], ['โอน', g.tr], ['พร้อมเพย์', g.pp], ['ส่วนลดรวม', g.disc], [],
     ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.pk), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.it), [],
-    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note']];
-  today.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, b.payment_method, i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note])));
+    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note', 'slip_url']];
+  today.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, b.payment_method, i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url])));
   const csv = '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

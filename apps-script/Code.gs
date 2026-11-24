@@ -10,6 +10,7 @@ const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
 const IMAGE_FOLDER = 'MayProtein POS Images';
+const SLIP_FOLDER = 'MayProtein POS Slips'; // รูปสลิปเก็บแบบส่วนตัว (ไม่แชร์ลิงก์)
 
 const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
@@ -17,7 +18,7 @@ const SCHEMA = {
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
-  Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id'],
+  Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url'],
   SaleItems: ['bill_id', 'line_no', 'item_id', 'item_name', 'qty', 'unit_price', 'line_total', 'package_id', 'package_set_no', 'slot'],
   Settings: ['key', 'value'],
   Users: ['user_id', 'username', 'display_name', 'pin_hash', 'salt', 'role', 'status', 'created_at'],
@@ -102,7 +103,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v3')) return;
+  if (cache.get('setup_ok_v4')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -125,7 +126,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v3', '1', 21600);
+  cache.put('setup_ok_v4', '1', 21600);
 }
 
 function headers_(name) {
@@ -536,19 +537,29 @@ function createSale_(p, user) {
     dAmount = Math.min(subtotal, Math.round(dAmount * 100) / 100);
     const total = Math.round((subtotal - dAmount) * 100) / 100;
 
+    const billId = nextId_(sales, 'bill_id', 'B', 4);
+
+    // รูปสลิป (ถ้ามี) — บันทึกก่อนตัดสต็อก ถ้าบันทึกรูปไม่ได้จะไม่ขาย
+    let slipUrl = '';
+    if (p.slip_data) {
+      const bytes = Utilities.base64Decode(str_(p.slip_data));
+      if (bytes.length > 4 * 1024 * 1024) throw new Error('รูปสลิปใหญ่เกิน 4MB');
+      const file = folder_(SLIP_FOLDER).createFile(Utilities.newBlob(bytes, 'image/jpeg', billId + '-slip-' + Date.now() + '.jpg'));
+      slipUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+    }
+
     deductions.forEach(function (d) { changeStock_(idx, d[0], -d[1]); });
     flushStock_(idx);
 
-    const billId = nextId_(sales, 'bill_id', 'B', 4);
     const bill = {
       bill_id: billId, datetime: now_(), event_name: str_(p.event_name), subtotal: subtotal,
       discount_type: dType, discount_value: dValue, discount_amount: dAmount, total: total,
-      payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId
+      payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId, slip_url: slipUrl
     };
     appendRow_('Sales', bill);
     appendRows_('SaleItems', items.map(function (it, i) { return Object.assign({ bill_id: billId, line_no: i + 1 }, it); }));
     log_(user, 'ขาย', 'บิล', billId, '', 'ยอด ' + total + ' ฿ · ' + ({ cash: 'เงินสด', transfer: 'โอน', promptpay: 'พร้อมเพย์' })[method] +
-      (dAmount ? ' · ส่วนลด ' + dAmount + ' ฿' : '') + ' · ' + items.filter(function (i) { return !i.slot; }).map(function (i) { return i.item_name + ' ×' + i.qty; }).join(', '));
+      (dAmount ? ' · ส่วนลด ' + dAmount + ' ฿' : '') + (slipUrl ? ' · มีรูปสลิป' : '') + ' · ' + items.filter(function (i) { return !i.slot; }).map(function (i) { return i.item_name + ' ×' + i.qty; }).join(', '));
     delete bill.client_id;
     bill.items = items;
     return { bill: bill };
@@ -565,7 +576,8 @@ function cleanSale_(r) {
   return {
     bill_id: str_(r.bill_id), datetime: str_(r.datetime), event_name: str_(r.event_name), subtotal: num_(r.subtotal),
     discount_type: str_(r.discount_type), discount_value: num_(r.discount_value), discount_amount: num_(r.discount_amount),
-    total: num_(r.total), payment_method: str_(r.payment_method), note: str_(r.note), staff: str_(r.staff)
+    total: num_(r.total), payment_method: str_(r.payment_method), note: str_(r.note), staff: str_(r.staff),
+    slip_url: str_(r.slip_url)
   };
 }
 
@@ -869,10 +881,12 @@ function stockCount_(p, user) {
   });
 }
 
-function imageFolder_() {
-  const it = DriveApp.getFoldersByName(IMAGE_FOLDER);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(IMAGE_FOLDER);
+function folder_(name) {
+  const it = DriveApp.getFoldersByName(name);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(name);
 }
+
+function imageFolder_() { return folder_(IMAGE_FOLDER); }
 
 function uploadImage_(p) {
   const mime = str_(p.mime) || 'image/jpeg';
@@ -887,8 +901,9 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v3');
+  CacheService.getScriptCache().remove('setup_ok_v4');
   ensureSetup_();
   imageFolder_();
+  folder_(SLIP_FOLDER);
   Logger.log('Setup done. Users so far: ' + readTable_('Users').length);
 }

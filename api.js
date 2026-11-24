@@ -182,6 +182,41 @@
       });
     },
 
+    /** เปิดตัวเลือกไฟล์/กล้อง แล้วคืนไฟล์ หรือ null ถ้ากดยกเลิก (ต้องเรียกจากการกดปุ่มโดยตรง) */
+    pickFile(input) {
+      return new Promise(resolve => {
+        input.value = '';
+        let done = false;
+        const finish = v => { if (done) return; done = true; window.removeEventListener('focus', onFocus); resolve(v); };
+        const onFocus = () => setTimeout(() => { if (!input.files.length) finish(null); }, 3000);
+        input.oncancel = () => finish(null);
+        input.onchange = () => finish(input.files[0] || null);
+        window.addEventListener('focus', onFocus);
+        input.click();
+      });
+    },
+
+    /** ย่อรูปถ่าย (เช่น สลิป) ให้ด้านยาวไม่เกิน max px แล้วคืน base64 JPEG (ไม่มี prefix) */
+    jpegImage(file, max, quality) {
+      max = max || 1280;
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL('image/jpeg', quality || 0.7).split(',')[1]);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('อ่านไฟล์รูปไม่ได้')); };
+        img.src = url;
+      });
+    },
+
     uuid() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
       return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2);
