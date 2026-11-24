@@ -23,7 +23,8 @@ const SCHEMA = {
   Settings: ['key', 'value'],
   Users: ['user_id', 'username', 'display_name', 'pin_hash', 'salt', 'role', 'status', 'created_at'],
   Sessions: ['token', 'user_id', 'expires_at'],
-  Logs: ['datetime', 'user', 'action', 'target_type', 'target_id', 'target_name', 'details']
+  Logs: ['datetime', 'user', 'action', 'target_type', 'target_id', 'target_name', 'details'],
+  Requisitions: ['req_id', 'created_at', 'doc_date', 'department', 'activity', 'requester', 'items_json', 'note', 'created_by']
 };
 
 const DEFAULT_SETTINGS = {
@@ -32,7 +33,8 @@ const DEFAULT_SETTINGS = {
   promptpay_qr_image_url: '',
   categories: 'อาหารเสริม,เสื้อผ้า,อุปกรณ์',
   subcategories: 'โปรตีน,พรีเวิร์กเอาต์,More',
-  units: 'ซอง,ชิ้น'
+  units: 'ซอง,ชิ้น',
+  department: 'Protein'
 };
 
 /* ---------------- HTTP ---------------- */
@@ -66,7 +68,8 @@ const ADMIN_ACTIONS = {
   todaySales: todaySales_, getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
-  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_, addStock: addStock_
+  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_, addStock: addStock_,
+  createRequisition: createRequisition_, listRequisitions: listRequisitions_
 };
 
 function route_(req) {
@@ -103,7 +106,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v4')) return;
+  if (cache.get('setup_ok_v5')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -126,7 +129,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v4', '1', 21600);
+  cache.put('setup_ok_v5', '1', 21600);
 }
 
 function headers_(name) {
@@ -201,7 +204,7 @@ function settingsMap_() {
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
   description: 'คำอธิบาย', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
-  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR'
+  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', department: 'แผนก'
 };
 
 /** สรุปว่าค่าไหนเปลี่ยนจากอะไรเป็นอะไร (oldRow = null แปลว่าสร้างใหม่) */
@@ -771,6 +774,80 @@ function saveSettings_(p, user) {
   });
 }
 
+/* ---------------- Requisitions (ใบเบิก) ---------------- */
+
+/**
+ * items: [{ item_id (ว่าง = รายการพิมพ์เอง ไม่ตัด/เพิ่มสต็อก), name, unit, qty_req, qty_recv, note }]
+ * สินค้าในระบบจะเพิ่มสต็อกตาม "จำนวนที่ได้รับ" (ถ้าไม่ใส่ ใช้ "จำนวนขอเบิก")
+ */
+function createRequisition_(p, user) {
+  const raw = (p.items || []).filter(function (it) { return it && (str_(it.item_id) || str_(it.name)); });
+  if (!raw.length) throw new Error('ใบเบิกต้องมีอย่างน้อย 1 รายการ');
+  const activity = str_(p.activity);
+  if (!activity) throw new Error('กรุณาใส่ชื่อกิจกรรม / งาน');
+  return withLock_(function () {
+    const idx = stockIndex_();
+    const items = raw.map(function (it) {
+      const id = str_(it.item_id);
+      const o = {
+        item_id: id, name: str_(it.name), unit: str_(it.unit),
+        qty_req: it.qty_req === '' || it.qty_req === null || it.qty_req === undefined ? '' : Math.round(num_(it.qty_req)),
+        qty_recv: it.qty_recv === '' || it.qty_recv === null || it.qty_recv === undefined ? '' : Math.round(num_(it.qty_recv)),
+        note: str_(it.note)
+      };
+      if (id) {
+        const s = idx[id];
+        if (!s) throw new Error('ไม่พบสินค้า ' + id);
+        if (s.has_variants) throw new Error('สินค้า ' + s.name + ' ต้องเลือกไซซ์/สี');
+        o.name = s.name;
+        if (!o.unit) o.unit = s.sheet === 'Products' ? str_(s.product.unit) : '';
+        o.qty_in = o.qty_recv !== '' ? o.qty_recv : num_(o.qty_req);
+        if (o.qty_in < 0) throw new Error('จำนวนต้องไม่ติดลบ');
+      }
+      return o;
+    });
+    const reqId = nextId_(readTable_('Requisitions'), 'req_id', 'RQ', 4);
+    const when = now_();
+    const stockRows = [];
+    items.forEach(function (o) {
+      if (!o.item_id || !o.qty_in) return;
+      o.stock_after = changeStock_(idx, o.item_id, o.qty_in);
+      stockRows.push(o);
+    });
+    if (stockRows.length) {
+      flushStock_(idx);
+      const base = Number(nextId_(readTable_('StockIn'), 'stockin_id', 'S', 4).slice(1));
+      appendRows_('StockIn', stockRows.map(function (o, i) {
+        return { stockin_id: 'S' + pad_(base + i, 4), datetime: when, event_name: activity, item_id: o.item_id, qty: o.qty_in, note: 'ใบเบิก ' + reqId + (o.note ? ' · ' + o.note : ''), staff: user.display_name };
+      }));
+    }
+    const req = {
+      req_id: reqId, created_at: when, doc_date: str_(p.doc_date) || today_(), department: str_(p.department),
+      activity: activity, requester: str_(p.requester) || user.display_name, note: str_(p.note), created_by: user.display_name
+    };
+    appendRow_('Requisitions', Object.assign({}, req, { items_json: JSON.stringify(items) }));
+    log_(user, 'เบิกสินค้า', 'ใบเบิก', reqId, activity, items.map(function (o) {
+      return o.name + ' ' + (o.qty_recv !== '' ? o.qty_recv : o.qty_req) + (o.unit ? ' ' + o.unit : '');
+    }).join(', '));
+    req.items = items;
+    return { requisition: req };
+  });
+}
+
+function listRequisitions_(p) {
+  const rows = readTable_('Requisitions');
+  return {
+    requisitions: rows.slice(-Math.min(500, num_(p.limit) || 100)).reverse().map(function (r) {
+      let items = [];
+      try { items = JSON.parse(str_(r.items_json) || '[]'); } catch (e) {}
+      return {
+        req_id: str_(r.req_id), created_at: str_(r.created_at), doc_date: str_(r.doc_date).slice(0, 10), department: str_(r.department),
+        activity: str_(r.activity), requester: str_(r.requester), note: str_(r.note), created_by: str_(r.created_by), items: items
+      };
+    })
+  };
+}
+
 /* ---------------- Delete ---------------- */
 
 /** เอาสินค้าที่ถูกลบออกจากช่องของทุกแพ็กเกจ คืนชื่อแพ็กเกจที่ได้รับผลกระทบ */
@@ -901,7 +978,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v4');
+  CacheService.getScriptCache().remove('setup_ok_v5');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);
