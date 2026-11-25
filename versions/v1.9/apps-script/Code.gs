@@ -6,6 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
+const SERVER_VERSION = '1.9'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -35,13 +36,22 @@ const DEFAULT_SETTINGS = {
   categories: 'อาหารเสริม,เสื้อผ้า,อุปกรณ์',
   subcategories: 'โปรตีน,พรีเวิร์กเอาต์,More',
   units: 'ซอง,ชิ้น',
-  department: 'Protein'
+  department: 'Protein',
+  receipt_name: '',
+  receipt_address: '',
+  receipt_phone: '',
+  receipt_tax_id: '',
+  receipt_footer: 'ขอบคุณที่อุดหนุนค่ะ',
+  receipt_logo: 'on',
+  receipt_qr: 'none',
+  receipt_qr_url: '',
+  receipt_qr_label: ''
 };
 
 /* ---------------- HTTP ---------------- */
 
 function doGet() {
-  return json_({ ok: true, app: 'MayProtein POS API' });
+  return json_({ ok: true, app: 'MayProtein POS API', version: SERVER_VERSION });
 }
 
 function doPost(e) {
@@ -107,7 +117,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v9')) return;
+  if (cache.get('setup_ok_v10')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -130,7 +140,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v9', '1', 21600);
+  cache.put('setup_ok_v10', '1', 21600);
 }
 
 function headers_(name) {
@@ -205,7 +215,9 @@ function settingsMap_() {
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
   description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
-  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก'
+  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก',
+  receipt_name: 'ชื่อบนใบเสร็จ', receipt_address: 'ที่อยู่', receipt_phone: 'เบอร์โทร', receipt_tax_id: 'เลขประจำตัวผู้เสียภาษี',
+  receipt_footer: 'ข้อความท้ายใบเสร็จ', receipt_logo: 'โลโก้บนใบเสร็จ', receipt_qr: 'QR ท้ายใบเสร็จ', receipt_qr_url: 'รูป QR ท้ายใบเสร็จ', receipt_qr_label: 'คำอธิบาย QR'
 };
 
 /** สรุปว่าค่าไหนเปลี่ยนจากอะไรเป็นอะไร (oldRow = null แปลว่าสร้างใหม่) */
@@ -327,7 +339,7 @@ function auth_(token) {
   return u;
 }
 
-function me_(p, user) { return { user: publicUser_(user) }; }
+function me_(p, user) { return { user: publicUser_(user), server_version: SERVER_VERSION }; }
 
 function logout_(p, user, token) {
   CacheService.getScriptCache().remove('tok_' + token);
@@ -754,6 +766,7 @@ function getImage_(p) {
 function getAdminData_() {
   const data = JSON.parse(JSON.stringify(cachedCatalog_(true)));
   data.users = readTable_('Users').map(publicUser_);
+  data.server_version = SERVER_VERSION;
   return data;
 }
 
@@ -1138,7 +1151,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v9');
+  CacheService.getScriptCache().remove('setup_ok_v10');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

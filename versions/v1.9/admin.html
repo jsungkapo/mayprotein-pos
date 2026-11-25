@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.9">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -96,7 +96,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 .lrow .d{margin-top:4px;color:#444;line-height:1.45;word-break:break-word}
 .act{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eee;margin-right:4px}
 .act.add{background:#e1f5ea;color:var(--ok)}.act.del{background:#fde4e4;color:var(--bad)}.act.edit{background:#e7efff;color:#2f5bd3}.act.sale{background:var(--pink-soft);color:var(--pink)}.act.stock{background:#fff3d6;color:var(--warn)}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.6 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.9 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
@@ -183,9 +183,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="requisition.js"></script>
+<script src="version.js?v=1.9"></script>
+<script src="config.js?v=1.9"></script>
+<script src="api.js?v=1.9"></script>
+<script src="requisition.js?v=1.9"></script>
+<script src="receipt.js?v=1.9"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -200,7 +202,7 @@ function busy(btn, on, txt) { btn.disabled = on; if (on) { btn._t = btn.textCont
 function opts(arr, cur) { const a = arr.includes(cur) || !cur ? arr : [cur, ...arr]; return '<option value="">—</option>' + a.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
-window.addEventListener('DOMContentLoaded', () => POS.logoFromCache());
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true }));
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
@@ -226,7 +228,7 @@ async function load() {
     if (!D.products.length) $('prodList').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="load()">ลองใหม่</a></div>`;
   }
 }
-function renderAll() { POS.showLogo(D.settings.logo_url || ''); renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
+function renderAll() { POS.showLogo && POS.showLogo(D.settings.logo_url || ''); renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
 
 /* ---------- image picking ---------- */
 // รูปจะขึ้นตัวอย่างทันที แล้วอัปโหลดไป Google Drive เบื้องหลัง ปุ่มบันทึกจะรอให้อัปโหลดเสร็จก่อน
@@ -244,9 +246,9 @@ function pickFile() {
     f.click();
   });
 }
-function imgBlock(url, fallback, extra) {
+function imgBlock(url, fallback, extra, hint) {
   const up = String(url || '').startsWith('data:');
-  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="" onerror="POS.imgFix(this)">` : fallback}${up ? '<div class="up"><span class="spin"></span> กำลังอัปโหลด</div>' : ''}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
+  return `<div class="imgEdit"><div class="pv ${extra || ''}">${url ? `<img src="${esc(url)}" alt="" onerror="POS.imgFix(this)">` : fallback}${up ? '<div class="up"><span class="spin"></span> กำลังอัปโหลด</div>' : ''}</div><div class="bt"><button class="btn sm line" data-act="img">${url ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}</button>${url ? '<button class="btn sm danger" data-act="noimg">ลบรูป</button>' : ''}<div class="hint">${hint ? hint : extra === 'qr' ? 'รูป QR พร้อมเพย์' : 'ระบบจะครอปเป็นสี่เหลี่ยมจัตุรัสให้'}</div></div></div>`;
 }
 function bindImg(root, getUrl, setUrl, mode) {
   const b1 = root.querySelector('[data-act="img"]'), b2 = root.querySelector('[data-act="noimg"]');
@@ -786,10 +788,25 @@ function renderUsers() {
 }
 
 /* ---------- settings ---------- */
+function versionHtml() {
+  const V = window.APP_VERSION || { version: '?', history: [], backups: [] };
+  const sv = D.server_version || '';
+  const warn = sv && sv !== V.version ? `<div class="hint" style="color:var(--warn)">หน้าเว็บ v${esc(V.version)} แต่เซิร์ฟเวอร์ v${esc(sv)} — กด 🔄 อัปเดตระบบ แล้วรอสักครู่</div>` : '';
+  const bk = (V.backups || []).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee">
+      <span><b>v${esc(v)}</b> <span class="hint">${esc(((V.history || []).find(h => h.version === v) || {}).notes || '')}</span></span>
+      <span style="white-space:nowrap"><a href="versions/v${esc(v)}/index.html" target="_blank">หน้าขาย</a> · <a href="versions/v${esc(v)}/admin.html" target="_blank">หลังบ้าน</a></span></div>`).join('') || '<div class="hint">ยังไม่มี</div>';
+  const hist = (V.history || []).slice(0, 15).map(h => `<tr><td style="white-space:nowrap"><b>v${esc(h.version)}</b><div class="hint" style="margin:0">${esc(String(h.date || '').slice(0, 10))}</div></td><td>${esc(h.notes)}</td></tr>`).join('');
+  return `<div class="sec" id="verSec"><h4>เวอร์ชัน <span class="tag ok">v${esc(V.version)}</span></h4>
+    <div class="hint">หน้าเว็บ v${esc(V.version)} · เซิร์ฟเวอร์ ${sv ? 'v' + esc(sv) : '-'} · แก้ล่าสุด ${esc(V.date || '')}</div>${warn}
+    <label>สำรองเวอร์ชันเก่า (เก็บ 3 เวอร์ชันล่าสุด)</label>${bk}
+    <div class="hint">เปิดเวอร์ชันเก่าได้ทันทีโดยใช้ข้อมูลชุดเดียวกัน ถ้าต้องการย้อนกลับทั้งระบบ บอก Claude ว่า “ย้อนกลับเป็นเวอร์ชัน x”</div>
+    <label>ประวัติการแก้ไข</label><table>${hist}</table></div>`;
+}
+const RC_KEYS = ['receipt_name', 'receipt_address', 'receipt_phone', 'receipt_tax_id', 'receipt_logo', 'receipt_footer', 'receipt_qr', 'receipt_qr_label'];
 function renderSettings() {
   const s = { ...D.settings };
   const el = $('setBox');
-  const keep = () => ['shop_name', 'current_event', 'categories', 'subcategories', 'units', 'department'].forEach(k => s[k] = $('s_' + k).value);
+  const keep = () => ['shop_name', 'current_event', 'categories', 'subcategories', 'units', 'department', ...RC_KEYS].forEach(k => { if ($('s_' + k)) s[k] = $('s_' + k).value; });
   const render = () => {
     el.innerHTML = `<label>ชื่อร้าน</label><input id="s_shop_name" value="${esc(s.shop_name)}">
       <label>ชื่องานเริ่มต้น (พนักงานเปลี่ยนในเครื่องตัวเองได้)</label><input id="s_current_event" value="${esc(s.current_event)}">
@@ -797,18 +814,42 @@ function renderSettings() {
       <label>หมวดย่อย (คั่นด้วย ,)</label><input id="s_subcategories" value="${esc(s.subcategories)}">
       <label>หน่วย (คั่นด้วย ,)</label><input id="s_units" value="${esc(s.units)}">
       <label>แผนก (ใช้ในใบเบิก)</label><input id="s_department" value="${esc(s.department || '')}">
-      <div class="sec" id="logoSec"><h4>โลโก้ร้าน (มุมซ้ายบน)</h4>${imgBlock(s.logo_url, '🏷️', 'qr')}<div class="hint">แนะนำไฟล์ PNG พื้นหลังโปร่งใส แสดงทั้งหน้าขายและหลังบ้าน</div></div>
+      <div class="sec" id="logoSec"><h4>โลโก้ร้าน (มุมซ้ายบน)</h4>${imgBlock(s.logo_url, '🏷️', 'qr', 'รูปโลโก้')}<div class="hint">แนะนำไฟล์ PNG พื้นหลังโปร่งใส แสดงทั้งหน้าขายและหลังบ้าน</div></div>
       <div class="sec" id="qrSec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
+      <div class="sec" id="rcSec"><h4>ใบเสร็จ</h4>
+        <label>ชื่อบนใบเสร็จ (ชื่อร้าน / บริษัท)</label><input id="s_receipt_name" value="${esc(s.receipt_name || '')}" placeholder="${esc(s.shop_name || '')}">
+        <label>ที่อยู่</label><textarea id="s_receipt_address" rows="2">${esc(s.receipt_address || '')}</textarea>
+        <div class="row"><div><label>เบอร์โทร</label><input id="s_receipt_phone" inputmode="tel" value="${esc(s.receipt_phone || '')}"></div>
+        <div><label>เลขประจำตัวผู้เสียภาษี</label><input id="s_receipt_tax_id" inputmode="numeric" maxlength="20" value="${esc(s.receipt_tax_id || '')}"></div></div>
+        <label>แสดงโลโก้บนใบเสร็จ</label><select id="s_receipt_logo"><option value="on">แสดง</option><option value="off">ไม่แสดง</option></select>
+        <label>ข้อความท้ายใบเสร็จ</label><textarea id="s_receipt_footer" rows="2" placeholder="เช่น ขอบคุณที่อุดหนุนค่ะ">${esc(s.receipt_footer || '')}</textarea>
+        <label>QR ท้ายใบเสร็จ</label><select id="s_receipt_qr"><option value="none">ไม่ใส่</option><option value="payment">QR รับเงิน (พร้อมเพย์ ด้านล่าง)</option><option value="custom">อัปโหลด QR เอง (เช่น LINE / IG / Facebook)</option></select>
+        <div id="rcQrBox" style="${s.receipt_qr === 'custom' ? '' : 'display:none'}"><div style="margin-top:8px">${imgBlock(s.receipt_qr_url, '🔳', 'qr', 'QR โซเชียล / LINE OA / เว็บไซต์')}</div></div>
+        <div id="rcLblBox" style="${s.receipt_qr && s.receipt_qr !== 'none' ? '' : 'display:none'}"><label>ข้อความใต้ QR</label><input id="s_receipt_qr_label" value="${esc(s.receipt_qr_label || '')}" placeholder="เช่น สแกนเพิ่มเพื่อน LINE รับโปรโมชั่น"></div>
+        <button class="btn sm line" id="rcPrev" style="margin-top:12px">👀 ดูตัวอย่างใบเสร็จ</button>
+        <div id="rcPrevBox" style="margin-top:10px"></div>
+      </div>
       <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>
       <div class="sec"><h4>อัปเดตระบบ</h4><div class="hint" style="margin-bottom:8px">ปกติระบบอัปเดตเองภายใน 5–10 นาทีหลังมีการแก้ไข กดปุ่มนี้ถ้าอยากได้เวอร์ชันล่าสุดทันที (หรือกด 🔄 มุมขวาบน)</div>
-      <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>`;
+      <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>
+      ${versionHtml()}`;
     bindImg($('qrSec'), () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
+    $('s_receipt_logo').value = s.receipt_logo || 'on';
+    $('s_receipt_qr').value = s.receipt_qr || 'none';
+    $('s_receipt_qr').onchange = () => { const v = $('s_receipt_qr').value; $('rcQrBox').style.display = v === 'custom' ? '' : 'none'; $('rcLblBox').style.display = v !== 'none' ? '' : 'none'; };
+    bindImg($('rcQrBox'), () => s.receipt_qr_url, (u, re) => { if (re === false) { s.receipt_qr_url = u; return; } keep(); s.receipt_qr_url = u; render(); }, 'qr');
+    $('rcPrev').onclick = async () => {
+      keep(); const b = $('rcPrev'); busy(b, true);
+      try { const c = await Receipt.render(Receipt.SAMPLE, s); c.style.cssText = 'width:100%;max-width:360px;display:block;margin:0 auto;box-shadow:0 2px 8px #0003;border-radius:4px'; $('rcPrevBox').innerHTML = ''; $('rcPrevBox').appendChild(c); }
+      catch (e) { POS.toast(e.message, true); }
+      busy(b, false, '👀 ดูตัวอย่างใบเสร็จ');
+    };
     bindImg($('logoSec'), () => s.logo_url, (u, re) => { if (re === false) { s.logo_url = u; return; } keep(); s.logo_url = u; render(); }, 'logo');
     $('sSave').onclick = async () => {
       keep(); const b = $('sSave'); busy(b, true);
       await waitUploads(b);
-      if (isTemp(s.promptpay_qr_image_url) || isTemp(s.logo_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
-      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.showLogo(r.settings.logo_url || ''); POS.toast('บันทึกแล้ว'); busy(b, false); }
+      if (isTemp(s.promptpay_qr_image_url) || isTemp(s.logo_url) || isTemp(s.receipt_qr_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
+      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.showLogo && POS.showLogo(r.settings.logo_url || ''); POS.toast('บันทึกแล้ว'); busy(b, false); }
       catch (e) { POS.toast(e.message, true); busy(b, false); }
     };
   };
