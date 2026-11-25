@@ -22,19 +22,27 @@
     clearSession() { LS.del('pos_token'); LS.del('pos_user'); LS.del('pos_admin_cache'); },
     pref(k, v) { if (v === undefined) return LS.get('pos_pref_' + k); LS.set('pos_pref_' + k, v); },
 
-    async call(action, payload) {
+    /** opts.timeout = มิลลิวินาที (ไม่ใส่ = ไม่จำกัด) · error ที่เกิดจากเน็ตจะมี e.network = true */
+    async call(action, payload, opts) {
+      opts = opts || {};
       const url = this.apiUrl();
       if (!url) throw new Error(ERR.NO_API);
-      let res;
+      const netErr = () => { const e = new Error(ERR.NETWORK); e.network = true; return e; };
+      if (navigator.onLine === false) throw netErr();
+      let res, timer;
+      const ctrl = window.AbortController ? new AbortController() : null;
+      if (ctrl && opts.timeout) timer = setTimeout(() => ctrl.abort(), opts.timeout);
       try {
         res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action, payload: payload || {}, token: this.token() })
+          body: JSON.stringify({ action, payload: payload || {}, token: this.token() }),
+          signal: ctrl ? ctrl.signal : undefined
         });
-      } catch (e) { throw new Error(ERR.NETWORK); }
+      } catch (e) { clearTimeout(timer); throw netErr(); }
       let j;
-      try { j = await res.json(); } catch (e) { throw new Error(ERR.NETWORK); }
+      try { j = await res.json(); } catch (e) { clearTimeout(timer); throw netErr(); }
+      clearTimeout(timer);
       if (!j.ok) {
         if (j.error === 'unauthorized') { this.clearSession(); setTimeout(() => location.reload(), 1200); }
         throw new Error(ERR[j.error] || j.error || 'เกิดข้อผิดพลาด');

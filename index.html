@@ -53,6 +53,12 @@ main{flex:1;overflow-y:auto;min-height:0}
 .slip .acts{display:flex;flex-direction:column;gap:6px}
 .cxl{margin-top:8px;padding:8px 10px;border-radius:8px;background:#fde4e4;color:var(--bad);font-size:13px;line-height:1.5}
 .bill.cancelled .h b.amt{text-decoration:line-through;color:#aaa}
+.netbar{display:none;flex:none;padding:7px 12px;font-size:13px;font-weight:700;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}
+.netbar.on{display:flex}
+.netbar.off{background:#3a3a3c;color:#fff}.netbar.wait{background:#fff3d6;color:#8a5a00}.netbar.err{background:#fde4e4;color:var(--bad)}
+.netbar button{border:0;border-radius:14px;padding:4px 10px;font-size:12px;background:rgba(255,255,255,.85);color:#333;font-weight:700}
+.pend{background:#fffaf0;border:1px dashed #e8b84a;border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+.pend .e{color:var(--bad);font-size:12px;margin-top:4px}
 .sliptag{border:1px solid var(--pink);background:var(--pink-soft);color:var(--pink);font-weight:700;padding:3px 9px}
 #mSlip{z-index:45}
 #mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
@@ -114,6 +120,7 @@ tr.low td{color:var(--bad)}
   <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
 </header>
+<div class="netbar" id="netBar" onclick="openPending()"></div>
 <div class="menu" id="menu"></div>
 <div class="tabs" id="tabs"></div>
 
@@ -192,6 +199,12 @@ tr.low td{color:var(--bad)}
   <div class="hint" id="askHint" style="font-size:12px;color:#888;margin-top:6px"></div>
   <br><button class="btn" id="askOk">สร้าง PDF</button><br><br><button class="btn g" onclick="closeM('mAsk')">ยกเลิก</button>
 </div></div>
+<div class="modal" id="mPend"><div class="sheet">
+  <h3>บิลที่รอส่งขึ้นระบบ</h3>
+  <div class="hint" style="font-size:12px;color:#888;margin-bottom:8px">บิลเหล่านี้ขายตอนไม่มีเน็ตและเก็บไว้ในเครื่องนี้ ระบบจะส่งขึ้นเองเมื่อมีเน็ต อย่าลบแอปหรือล้างข้อมูล Safari จนกว่าจะส่งครบ</div>
+  <div id="pendList"></div>
+  <br><button class="btn" id="pendSync">📤 ส่งตอนนี้</button><br><br><button class="btn g" onclick="closeM('mPend')">ปิด</button>
+</div></div>
 <div class="modal" id="mCancel"><div class="sheet">
   <h3 id="cxTitle" style="color:var(--bad)">ยกเลิกบิล?</h3>
   <div id="cxInfo" style="font-size:14px;line-height:1.6;background:#fff5f5;border-radius:10px;padding:10px"></div>
@@ -210,6 +223,7 @@ tr.low td{color:var(--bad)}
 <script src="api.js"></script>
 <script src="requisition.js"></script>
 <script src="report.js"></script>
+<script src="offline.js"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
@@ -239,13 +253,14 @@ function boot() {
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
   if (tabs.length === 1) $('tabs').style.display = 'none';
   $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
-    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="POS.logout()">ออกจากระบบ</a>';
+    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="safeLogout()">ออกจากระบบ</a>';
   $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
   document.addEventListener('click', () => $('menu').classList.remove('on'));
   $('q').oninput = renderGrid;
   document.querySelectorAll('#pay button').forEach(b => b.onclick = () => { method = b.dataset.m; document.querySelectorAll('#pay button').forEach(x => x.classList.toggle('on', x === b)); renderQr(); renderSlip(); });
   renderCart();
-  loadCatalog();
+  Offline.onChange(renderNetBar);
+  Offline.refresh().then(() => { loadCatalog(); Offline.sync(); Offline.schedule(); });
 }
 
 const CAT_CACHE = 'pos_catalog_cache';
@@ -271,15 +286,21 @@ async function loadCatalog() {
     try { const c = JSON.parse(localStorage.getItem(CAT_CACHE) || 'null'); if (c && c.products) { cat = c; applyCatalog(); } } catch (e) {}
   }
   try {
-    const r = await POS.call('getCatalog');
+    const r = await POS.call('getCatalog', null, { timeout: 30000 });
     delete r.ok;
     cat = r;
+    // บิลที่ยังค้างส่ง: หักสต็อกบนจอไว้ก่อน เซิร์ฟเวอร์ยังไม่รู้
+    Offline.items.forEach(it => applyDeductions(it.payload, -1));
     saveCatalogCache();
     applyCatalog();
     return;
-  } catch (e) { POS.toast(e.message, true); if (!cat.products.length) $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
+  } catch (e) { if (!(e.network && cat.products.length)) POS.toast(e.message, true); if (!cat.products.length) $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
 }
 
+function safeLogout() {
+  if (Offline.count && !confirm(`ยังมีบิลรอส่ง ${Offline.count} บิลในเครื่องนี้ ถ้าออกจากระบบ บิลจะยังอยู่ แต่จะส่งได้ต่อเมื่อเข้าสู่ระบบอีกครั้ง ออกจากระบบเลยไหม?`)) return;
+  POS.logout();
+}
 function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = '📍 ' + (ev || 'แตะเพื่อใส่ชื่องาน'); }
 function editEvent() {
   const v = prompt('ชื่องาน / สถานที่ (บันทึกกับทุกบิลจากเครื่องนี้)', POS.pref('event') || '');
@@ -480,13 +501,20 @@ async function pay() {
   }
   const { net } = calc();
   paying = true; $('payBtn').disabled = true; $('payBtn').innerHTML = '<span class="spin"></span> กำลังบันทึก';
+  const payload = {
+    client_id: clientId, event_name: POS.pref('event') || '', payment_method: method,
+    discount_type: $('dtype').value, discount_value: +$('disc').value || 0, note: $('note').value.trim(),
+    slip_data: needsSlip() && slip ? slip.data : '',
+    lines: cart.map(c => ({ type: c.type, id: c.id, qty: c.qty, selections: c.selections }))
+  };
   try {
-    const r = await POS.call('createSale', {
-      client_id: clientId, event_name: POS.pref('event') || '', payment_method: method,
-      discount_type: $('dtype').value, discount_value: +$('disc').value || 0, note: $('note').value.trim(),
-      slip_data: needsSlip() && slip ? slip.data : '',
-      lines: cart.map(c => ({ type: c.type, id: c.id, qty: c.qty, selections: c.selections }))
-    });
+    let r;
+    try { r = await POS.call('createSale', payload, { timeout: 25000 }); }
+    catch (e) {
+      if (!e.network) throw e;
+      await saveOffline(payload);
+      return;
+    }
     const b = r.bill;
     if (Math.abs(b.total - net) > 0.01) POS.toast('ยอดสุทธิจากเซิร์ฟเวอร์: ' + money(b.total) + ' บาท');
     if (r.auto_hidden && r.auto_hidden.length) setTimeout(() => POS.toast('สินค้าหมด ปิดขายอัตโนมัติ: ' + r.auto_hidden.join(', '), true), 600);
@@ -498,8 +526,93 @@ async function pay() {
     saveCatalogCache(); renderGrid();
     loadCatalog();
   } catch (e) { POS.toast(e.message, true); }
-  paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย';
+  finally { paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย'; }
 }
+
+/* ---------- ขายตอนออฟไลน์ ---------- */
+const pad2 = n => String(n).padStart(2, '0');
+const localStamp = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+/** หัก (sign=-1) หรือคืน (+1) สต็อกบนจอตามบิล */
+function applyDeductions(payload, sign) {
+  const add = (id, q) => { const p = P(id), v = V(id); if (p && !p.has_variants) p.stock_qty += sign * q; if (v) v.stock_qty += sign * q; };
+  (payload.lines || []).forEach(l => {
+    if (l.type !== 'package') return add(l.id, l.qty);
+    const k = cat.packages.find(x => x.package_id === l.id);
+    if (k) pkDef(k).fixed.forEach(f => add(f.id, f.qty * l.qty));
+    ((l.selections || {}).pool || []).forEach(x => add(x.id, x.qty * l.qty));
+  });
+}
+/** สร้างใบเสร็จในเครื่อง (ตัวเลขเดียวกับที่เซิร์ฟเวอร์จะคำนวณ) */
+function localBill(payload, no, when) {
+  const items = []; let sub = 0, setNo = 0;
+  cart.forEach(c => {
+    if (c.type !== 'package') { items.push({ item_id: c.id, item_name: c.name, qty: c.qty, unit_price: c.price, line_total: c.price * c.qty, package_id: '', slot: '' }); sub += c.price * c.qty; return; }
+    setNo++;
+    items.push({ item_id: c.id, item_name: c.name, qty: c.qty, unit_price: c.price, line_total: c.price * c.qty, package_id: c.id, package_set_no: setNo, slot: '' });
+    sub += c.price * c.qty;
+    const k = cat.packages.find(x => x.package_id === c.id);
+    if (k) pkDef(k).fixed.forEach(f => items.push({ item_id: f.id, item_name: itemName(f.id), qty: f.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'ติดเซต' }));
+    ((c.selections || {}).pool || []).forEach(x => items.push({ item_id: x.id, item_name: itemName(x.id), qty: x.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'เลือก' }));
+  });
+  const d = Math.max(0, payload.discount_value), da = Math.min(sub, payload.discount_type === 'percent' ? sub * Math.min(d, 100) / 100 : d);
+  return { bill_id: 'รอส่ง #' + no, datetime: when, subtotal: sub, discount_type: payload.discount_type, discount_value: d, discount_amount: da, total: Math.round((sub - da) * 100) / 100, payment_method: payload.payment_method, note: payload.note, staff: me.display_name, items };
+}
+async function saveOffline(payload) {
+  const when = localStamp(new Date());
+  const no = Offline.nextNo();
+  const b = localBill(payload, no, when);
+  payload.offline = true; payload.sold_at = when;
+  try {
+    await Offline.add({ client_id: payload.client_id, payload, created_at: new Date().toISOString(), local_no: no, user: me.username, bill: b });
+  } catch (e) { POS.toast('บันทึกบิลในเครื่องไม่สำเร็จ: ' + e.message, true); return; }
+  applyDeductions(payload, -1);
+  saveCatalogCache();
+  cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
+  $('disc').value = 0; $('note').value = ''; clientId = null; slip = null;
+  $('okSheet').innerHTML = `<div class="ic">📴</div><div>ขายสำเร็จ (ไม่มีอินเทอร์เน็ต)</div><div class="bn" style="color:#8a5a00">รอส่ง #${no}</div><small style="color:#888">${esc(when)} · บันทึกไว้ในเครื่องนี้ จะส่งขึ้นระบบเองเมื่อมีเน็ต</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
+  $('mOk').classList.add('on');
+}
+
+/* แถบสถานะเน็ต / บิลรอส่ง */
+function renderNetBar() {
+  const bar = $('netBar'), n = Offline.count, errs = Offline.items.filter(x => x.error).length, off = navigator.onLine === false;
+  if (!n && !off) { bar.className = 'netbar'; return; }
+  bar.className = 'netbar on ' + (errs ? 'err' : off ? 'off' : 'wait');
+  bar.innerHTML = `<span>${off ? '📴 ไม่มีอินเทอร์เน็ต · ขายต่อได้ บิลจะเก็บไว้ในเครื่อง' : Offline.syncing ? '⏳ กำลังส่งบิลค้าง…' : '📤 มีบิลรอส่ง'}${n ? ` · รอส่ง ${n} บิล` : ''}${errs ? ` (ส่งไม่ผ่าน ${errs})` : ''}</span>${n && !off ? '<button>ดู / ส่ง</button>' : ''}`;
+  if ($('mPend').classList.contains('on')) renderPending();
+  if (document.getElementById('p-bills').classList.contains('on')) renderBills();
+}
+function openPending() { if (!Offline.count) return; renderPending(); $('mPend').classList.add('on'); }
+function renderPending() {
+  $('pendList').innerHTML = Offline.items.map(it => `<div class="pend"><div style="display:flex;justify-content:space-between"><b>รอส่ง #${it.local_no}</b><b>${money(it.bill.total)}฿</b></div>
+    <small style="color:#888">${esc(it.bill.datetime)} · ${esc(MLABEL[it.payload.payment_method] || '')} · ${esc(it.bill.staff)}${it.payload.slip_data ? ' · 📎 มีสลิป' : ''}</small>
+    ${it.error ? `<div class="e">ส่งไม่ผ่าน: ${esc(it.error)}</div><div style="margin-top:6px;display:flex;gap:6px"><button class="btn sm line" data-retry="${esc(it.client_id)}">ลองส่งอีกครั้ง</button>${POS.isAdmin() ? `<button class="btn sm danger" data-del="${esc(it.client_id)}">ทิ้งบิลนี้</button>` : ''}</div>` : ''}</div>`).join('') || '<div class="empty">ไม่มีบิลค้าง</div>';
+  $('pendList').querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => { await Offline.update(b.dataset.retry, { error: '' }); syncNow(); });
+  $('pendList').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const it = Offline.items.find(x => x.client_id === b.dataset.del);
+    if (!confirm(`ทิ้งบิล รอส่ง #${it.local_no} (${money(it.bill.total)} บาท)? บิลนี้จะไม่ถูกบันทึกเข้าระบบเลย`)) return;
+    applyDeductions(it.payload, +1); saveCatalogCache(); renderGrid();
+    await Offline.remove(it.client_id);
+  });
+  $('pendSync').onclick = syncNow;
+}
+async function syncNow() {
+  const b = $('pendSync'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังส่ง';
+  const r = await Offline.sync({ force: true, retryErrors: true });
+  b.disabled = false; b.textContent = '📤 ส่งตอนนี้';
+  if (r.stopped) POS.toast('ยังเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่เมื่อมีเน็ต', true);
+  else if (r.failed) POS.toast(`ส่งไม่ผ่าน ${r.failed} บิล ดูรายละเอียดในรายการ`, true);
+  if (!Offline.count) closeM('mPend');
+}
+Offline.onSent = sent => {
+  POS.toast(`ส่งบิลค้างขึ้นระบบแล้ว ${sent.length} บิล: ` + sent.map(b => `#${b.local_no} → ${b.bill_id}`).join(', '));
+  const hid = sent.flatMap(b => b.auto_hidden || []);
+  if (hid.length) setTimeout(() => POS.toast('สินค้าหมด ปิดขายอัตโนมัติ: ' + hid.join(', '), true), 2500);
+  loadCatalog();
+  if (document.getElementById('p-bills').classList.contains('on')) loadToday(true);
+};
+window.addEventListener('online', renderNetBar);
+window.addEventListener('offline', renderNetBar);
 function receiptHtml(b) {
   const head = b.items.filter(i => !i.slot);
   return `<div class="rc">${head.map(it => {
@@ -519,7 +632,7 @@ function receiptHtml(b) {
 async function loadToday(force) {
   if (!today.bills.length || force) $('billList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
   try { today = await POS.call('todaySales'); renderBills(); }
-  catch (e) { POS.toast(e.message, true); }
+  catch (e) { renderBills(); POS.toast(e.network ? 'ไม่มีอินเทอร์เน็ต — แสดงเฉพาะบิลที่รอส่งในเครื่องนี้' : e.message, true); }
 }
 function renderBills() {
   const bs = today.bills;
@@ -527,7 +640,8 @@ function renderBills() {
   $('bCnt').textContent = live.length + (live.length !== bs.length ? ` (ยกเลิก ${bs.length - live.length})` : '');
   $('bSum').textContent = money(live.reduce((a, b) => a + b.total, 0));
   $('bSumWrap').style.display = POS.isAdmin() ? '' : 'none';
-  $('billList').innerHTML = bs.map(b => `<div class="bill ${b.status === 'cancelled' ? 'cancelled' : ''}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b>${b.status === 'cancelled' ? '<span class="tag bad">ยกเลิก</span>' : ''}<span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b class="amt">${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}${b.status === 'cancelled' ? '' : `<button class="btn sm danger" style="margin-top:4px" onclick="event.stopPropagation();openCancel('${esc(b.bill_id)}')">ยกเลิกบิลนี้</button>`}</div></div>`).join('') || '<div class="empty">ยังไม่มีการขายวันนี้</div>';
+  const pend = Offline.items.filter(it => POS.isAdmin() || it.user === me.username).map(it => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b style="color:#8a5a00">รอส่ง #${it.local_no}</b><span class="tag warn">${it.error ? 'ส่งไม่ผ่าน' : 'ยังไม่ขึ้นระบบ'}</span><span class="tag">${MLABEL[it.payload.payment_method] || ''}</span><br><small style="color:#888">${esc(it.bill.datetime.slice(11, 16))} น. · ${esc(it.bill.staff)}</small></span><b>${money(it.bill.total)}฿</b></div><div class="d">${receiptHtml(it.bill)}<small style="color:#888">ยกเลิกได้หลังส่งขึ้นระบบแล้ว</small></div></div>`).join('');
+  $('billList').innerHTML = pend + bs.map(b => `<div class="bill ${b.status === 'cancelled' ? 'cancelled' : ''}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b>${b.status === 'cancelled' ? '<span class="tag bad">ยกเลิก</span>' : ''}<span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b class="amt">${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}${b.status === 'cancelled' ? '' : `<button class="btn sm danger" style="margin-top:4px" onclick="event.stopPropagation();openCancel('${esc(b.bill_id)}')">ยกเลิกบิลนี้</button>`}</div></div>`).join('') || (pend ? '' : '<div class="empty">ยังไม่มีการขายวันนี้</div>');
 }
 
 /* ---------- ยกเลิกบิล ---------- */

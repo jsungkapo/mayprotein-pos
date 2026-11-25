@@ -588,7 +588,8 @@ function createSale_(p, user) {
         if (!it) throw new Error('ไม่พบสินค้า ' + id);
         const parentRow = it.sheet === 'Variants' ? (idx[str_(it.variant.product_id)] || {}).product : null;
         const active = it.sheet === 'Products' ? bool_(it.product.active) : bool_(it.variant.active) && (!parentRow || bool_(parentRow.active));
-        if (!active) throw new Error(it.name + ' ปิดขายอยู่ (เช่น สินค้าหมด) — เปิดขายได้ที่หลังบ้าน');
+        // บิลที่ขายตอนออฟไลน์ ขายไปแล้วจริง จึงรับไว้แม้สินค้าถูกปิดขายระหว่างนั้น
+        if (!active && !p.offline) throw new Error(it.name + ' ปิดขายอยู่ (เช่น สินค้าหมด) — เปิดขายได้ที่หลังบ้าน');
         const price = it.sheet === 'Variants' ? it.price : num_(it.product.price);
         items.push({ item_id: id, item_name: it.name, qty: qty, unit_price: price, line_total: price * qty, package_id: '', package_set_no: '', slot: '' });
         subtotal += price * qty;
@@ -618,18 +619,27 @@ function createSale_(p, user) {
     const autoHidden = flushStock_(idx, user);
 
     const bill = {
-      bill_id: billId, datetime: now_(), event_name: str_(p.event_name), subtotal: subtotal,
+      bill_id: billId, datetime: saleTime_(p), event_name: str_(p.event_name), subtotal: subtotal,
       discount_type: dType, discount_value: dValue, discount_amount: dAmount, total: total,
       payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId, slip_url: slipUrl
     };
     appendRow_('Sales', bill);
     appendRows_('SaleItems', items.map(function (it, i) { return Object.assign({ bill_id: billId, line_no: i + 1 }, it); }));
     log_(user, 'ขาย', 'บิล', billId, '', 'ยอด ' + total + ' ฿ · ' + ({ cash: 'เงินสด', transfer: 'โอน', promptpay: 'โอน (QR)' })[method] +
-      (dAmount ? ' · ส่วนลด ' + dAmount + ' ฿' : '') + (slipUrl ? ' · มีรูปสลิป' : '') + ' · ' + items.filter(function (i) { return !i.slot; }).map(function (i) { return i.item_name + ' ×' + i.qty; }).join(', '));
+      (dAmount ? ' · ส่วนลด ' + dAmount + ' ฿' : '') + (slipUrl ? ' · มีรูปสลิป' : '') + (p.offline ? ' · ขายตอนออฟไลน์ ส่งขึ้นภายหลัง' : '') + ' · ' + items.filter(function (i) { return !i.slot; }).map(function (i) { return i.item_name + ' ×' + i.qty; }).join(', '));
     delete bill.client_id;
     bill.items = items;
     return { bill: bill, auto_hidden: autoHidden };
   });
+}
+
+/** เวลาขาย: บิลออฟไลน์ใช้เวลาที่ขายจริงในเครื่อง (ถ้าสมเหตุสมผล) ไม่งั้นใช้เวลาตอนบันทึก */
+function saleTime_(p) {
+  const t = str_(p.sold_at);
+  if (!p.offline || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)) return now_();
+  const nowStr = now_();
+  const monthAgo = Utilities.formatDate(new Date(Date.now() - 30 * 86400000), tz_(), 'yyyy-MM-dd HH:mm:ss');
+  return t <= nowStr && t >= monthAgo ? t : nowStr;
 }
 
 function billOf_(billId) {
