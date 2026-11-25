@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261125b">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -183,9 +183,9 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="requisition.js"></script>
+<script src="config.js?v=20261125b"></script>
+<script src="api.js?v=20261125b"></script>
+<script src="requisition.js?v=20261125b"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -200,7 +200,7 @@ function busy(btn, on, txt) { btn.disabled = on; if (on) { btn._t = btn.textCont
 function opts(arr, cur) { const a = arr.includes(cur) || !cur ? arr : [cur, ...arr]; return '<option value="">—</option>' + a.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
-window.addEventListener('DOMContentLoaded', () => POS.logoFromCache());
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true }));
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
@@ -226,7 +226,7 @@ async function load() {
     if (!D.products.length) $('prodList').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="load()">ลองใหม่</a></div>`;
   }
 }
-function renderAll() { POS.showLogo(D.settings.logo_url || ''); renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
+function renderAll() { POS.showLogo && POS.showLogo(D.settings.logo_url || ''); renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
 
 /* ---------- image picking ---------- */
 // รูปจะขึ้นตัวอย่างทันที แล้วอัปโหลดไป Google Drive เบื้องหลัง ปุ่มบันทึกจะรอให้อัปโหลดเสร็จก่อน
@@ -808,7 +808,7 @@ function renderSettings() {
       keep(); const b = $('sSave'); busy(b, true);
       await waitUploads(b);
       if (isTemp(s.promptpay_qr_image_url) || isTemp(s.logo_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
-      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.showLogo(r.settings.logo_url || ''); POS.toast('บันทึกแล้ว'); busy(b, false); }
+      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.showLogo && POS.showLogo(r.settings.logo_url || ''); POS.toast('บันทึกแล้ว'); busy(b, false); }
       catch (e) { POS.toast(e.message, true); busy(b, false); }
     };
   };

@@ -11,7 +11,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <title>MayProtein POS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261125b">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
@@ -219,11 +219,11 @@ tr.low td{color:var(--bad)}
   <br><button class="btn g" onclick="closeM('mSlip')">ปิด</button>
 </div></div>
 
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="requisition.js"></script>
-<script src="report.js"></script>
-<script src="offline.js"></script>
+<script src="config.js?v=20261125b"></script>
+<script src="api.js?v=20261125b"></script>
+<script src="requisition.js?v=20261125b"></script>
+<script src="report.js?v=20261125b"></script>
+<script src="offline.js?v=20261125b"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
@@ -244,7 +244,7 @@ function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'
 
 /* ---------- boot ---------- */
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
-window.addEventListener('DOMContentLoaded', () => POS.logoFromCache());
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; boot(); }));
 
 function boot() {
@@ -267,7 +267,7 @@ function boot() {
 const CAT_CACHE = 'pos_catalog_cache';
 function applyCatalog() {
   $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
-  POS.showLogo(cat.settings.logo_url || '');
+  POS.showLogo && POS.showLogo(cat.settings.logo_url || '');
   if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
   showEvent();
   cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
