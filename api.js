@@ -170,7 +170,7 @@
     },
 
     /** อ่านรูปตามสัดส่วนเดิม (สำหรับ QR) ย่อด้านยาวสุดเหลือ max px */
-    scaledImage(file, max) {
+    scaledImage(file, max, transparent) {
       max = max || 1000;
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -180,7 +180,7 @@
           const c = document.createElement('canvas');
           c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
           const ctx = c.getContext('2d');
-          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          if (!transparent) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); }
           ctx.drawImage(img, 0, 0, c.width, c.height);
           URL.revokeObjectURL(url);
           resolve(c.toDataURL('image/png').split(',')[1]);
@@ -259,6 +259,23 @@
       try { const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : []; await Promise.all(regs.map(r => r.update())); } catch (e) {}
       POS.toast(ok ? 'อัปเดตระบบเป็นเวอร์ชันล่าสุดแล้ว' : 'อัปเดตหน้าเว็บแล้ว (เซิร์ฟเวอร์จะอัปเดตเองภายใน 5–10 นาที)', !ok);
       setTimeout(() => location.reload(), 1200);
+    },
+
+    /** แสดงโลโก้ร้านที่มุมซ้ายบน (โหลดผ่านเซิร์ฟเวอร์แล้วจำไว้ในเครื่อง) */
+    async showLogo(url) {
+      const el = document.getElementById('logo');
+      if (!el) return;
+      if (!url) { el.style.display = 'none'; LS.del('pos_logo_src'); return; }
+      const cached = LS.get('pos_logo_src');
+      if (cached) { el.src = cached; el.style.display = ''; }
+      try {
+        const data = url.startsWith('data:') ? url : await POS.imageData(url);
+        el.src = data; el.style.display = ''; LS.set('pos_logo_src', data);
+      } catch (e) { if (!cached) el.style.display = 'none'; }
+    },
+    logoFromCache() {
+      const el = document.getElementById('logo'), c = LS.get('pos_logo_src');
+      if (el && c) { el.src = c; el.style.display = ''; }
     },
 
     uuid() {

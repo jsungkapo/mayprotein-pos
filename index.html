@@ -117,7 +117,7 @@ main{flex:1;overflow-y:auto;min-height:0}
 tr.low td{color:var(--bad)}
 </style></head><body>
 <header class="top">
-  <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div>
+  <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
 </header>
 <div class="netbar" id="netBar" onclick="openPending()"></div>
@@ -244,6 +244,7 @@ function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'
 
 /* ---------- boot ---------- */
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; boot(); }));
 
 function boot() {
@@ -266,6 +267,7 @@ function boot() {
 const CAT_CACHE = 'pos_catalog_cache';
 function applyCatalog() {
   $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
+  POS.showLogo(cat.settings.logo_url || '');
   if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
   showEvent();
   cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));

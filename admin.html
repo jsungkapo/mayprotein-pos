@@ -98,7 +98,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 .act.add{background:#e1f5ea;color:var(--ok)}.act.del{background:#fde4e4;color:var(--bad)}.act.edit{background:#e7efff;color:#2f5bd3}.act.sale{background:var(--pink-soft);color:var(--pink)}.act.stock{background:#fff3d6;color:var(--warn)}
 </style></head><body>
 <header class="top">
-  <div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div>
+  <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
@@ -200,6 +200,7 @@ function busy(btn, on, txt) { btn.disabled = on; if (on) { btn._t = btn.textCont
 function opts(arr, cur) { const a = arr.includes(cur) || !cur ? arr : [cur, ...arr]; return '<option value="">—</option>' + a.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true }));
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
@@ -225,7 +226,7 @@ async function load() {
     if (!D.products.length) $('prodList').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="load()">ลองใหม่</a></div>`;
   }
 }
-function renderAll() { renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
+function renderAll() { POS.showLogo(D.settings.logo_url || ''); renderProducts(); renderPackages(); renderUsers(); renderSettings(); }
 
 /* ---------- image picking ---------- */
 // รูปจะขึ้นตัวอย่างทันที แล้วอัปโหลดไป Google Drive เบื้องหลัง ปุ่มบันทึกจะรอให้อัปโหลดเสร็จก่อน
@@ -254,10 +255,10 @@ function bindImg(root, getUrl, setUrl, mode) {
     if (!file) return;
     busy(b1, true);
     let data;
-    try { data = mode === 'qr' ? await POS.scaledImage(file, 1000) : await POS.squareImage(file, 600); }
+    try { data = mode === 'qr' ? await POS.scaledImage(file, 1000) : mode === 'logo' ? await POS.scaledImage(file, 400, true) : await POS.squareImage(file, 600); }
     catch (e) { POS.toast(e.message, true); busy(b1, false); return; }
     const before = getUrl();
-    const mime = mode === 'qr' ? 'image/png' : 'image/jpeg';
+    const mime = mode === 'qr' || mode === 'logo' ? 'image/png' : 'image/jpeg';
     const preview = 'data:' + mime + ';base64,' + data;
     setUrl(preview, true);
     const job = POS.call('uploadImage', { data, mime, name: mode })
@@ -796,16 +797,18 @@ function renderSettings() {
       <label>หมวดย่อย (คั่นด้วย ,)</label><input id="s_subcategories" value="${esc(s.subcategories)}">
       <label>หน่วย (คั่นด้วย ,)</label><input id="s_units" value="${esc(s.units)}">
       <label>แผนก (ใช้ในใบเบิก)</label><input id="s_department" value="${esc(s.department || '')}">
-      <div class="sec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
+      <div class="sec" id="logoSec"><h4>โลโก้ร้าน (มุมซ้ายบน)</h4>${imgBlock(s.logo_url, '🏷️', 'qr')}<div class="hint">แนะนำไฟล์ PNG พื้นหลังโปร่งใส แสดงทั้งหน้าขายและหลังบ้าน</div></div>
+      <div class="sec" id="qrSec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
       <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>
       <div class="sec"><h4>อัปเดตระบบ</h4><div class="hint" style="margin-bottom:8px">ปกติระบบอัปเดตเองภายใน 5–10 นาทีหลังมีการแก้ไข กดปุ่มนี้ถ้าอยากได้เวอร์ชันล่าสุดทันที (หรือกด 🔄 มุมขวาบน)</div>
       <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>`;
-    bindImg(el, () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
+    bindImg($('qrSec'), () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
+    bindImg($('logoSec'), () => s.logo_url, (u, re) => { if (re === false) { s.logo_url = u; return; } keep(); s.logo_url = u; render(); }, 'logo');
     $('sSave').onclick = async () => {
       keep(); const b = $('sSave'); busy(b, true);
       await waitUploads(b);
-      if (isTemp(s.promptpay_qr_image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
-      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.toast('บันทึกแล้ว'); busy(b, false); }
+      if (isTemp(s.promptpay_qr_image_url) || isTemp(s.logo_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึกการตั้งค่า'); return; }
+      try { const r = await POS.call('saveSettings', s); D.settings = r.settings; POS.showLogo(r.settings.logo_url || ''); POS.toast('บันทึกแล้ว'); busy(b, false); }
       catch (e) { POS.toast(e.message, true); busy(b, false); }
     };
   };

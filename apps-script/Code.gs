@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   shop_name: 'MayProtein',
   current_event: '',
   promptpay_qr_image_url: '',
+  logo_url: '',
   categories: 'อาหารเสริม,เสื้อผ้า,อุปกรณ์',
   subcategories: 'โปรตีน,พรีเวิร์กเอาต์,More',
   units: 'ซอง,ชิ้น',
@@ -106,7 +107,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v8')) return;
+  if (cache.get('setup_ok_v9')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -129,7 +130,7 @@ function ensureSetup_() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
   });
-  cache.put('setup_ok_v8', '1', 21600);
+  cache.put('setup_ok_v9', '1', 21600);
 }
 
 function headers_(name) {
@@ -204,7 +205,7 @@ function settingsMap_() {
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
   description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
-  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', department: 'แผนก'
+  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก'
 };
 
 /** สรุปว่าค่าไหนเปลี่ยนจากอะไรเป็นอะไร (oldRow = null แปลว่าสร้างใหม่) */
@@ -217,7 +218,7 @@ function diff_(oldRow, obj) {
     const b = obj[k];
     if (typeof b === 'boolean') a = oldRow ? bool_(a) : null;
     if (oldRow && String(a === undefined ? '' : a) === String(b)) return;
-    if (k === 'image_url' || k === 'promptpay_qr_image_url') {
+    if (k === 'image_url' || k === 'promptpay_qr_image_url' || k === 'logo_url') {
       if (!oldRow && !b) return;
       out.push((LABELS[k] || 'รูป') + ': ' + (b ? (a ? 'เปลี่ยนรูป' : 'เพิ่มรูป') : 'ลบรูป'));
       return;
@@ -1137,7 +1138,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v8');
+  CacheService.getScriptCache().remove('setup_ok_v9');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);
