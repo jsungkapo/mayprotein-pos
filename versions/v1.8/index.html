@@ -11,7 +11,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <title>MayProtein POS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.8">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
@@ -115,9 +115,9 @@ main{flex:1;overflow-y:auto;min-height:0}
 .menu a,.menu div{display:block;padding:12px 16px;color:var(--text);border-bottom:1px solid #f0f0f0;font-size:15px;text-decoration:none}
 .menu div{color:var(--muted);font-size:12px}
 tr.low td{color:var(--bad)}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.5 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.8 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
-  <div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div>
+  <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
 </header>
 <div class="netbar" id="netBar" onclick="openPending()"></div>
@@ -219,11 +219,12 @@ tr.low td{color:var(--bad)}
   <br><button class="btn g" onclick="closeM('mSlip')">ปิด</button>
 </div></div>
 
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="requisition.js"></script>
-<script src="report.js"></script>
-<script src="offline.js"></script>
+<script src="version.js?v=1.8"></script>
+<script src="config.js?v=1.8"></script>
+<script src="api.js?v=1.8"></script>
+<script src="requisition.js?v=1.8"></script>
+<script src="report.js?v=1.8"></script>
+<script src="offline.js?v=1.8"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
@@ -244,6 +245,7 @@ function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'
 
 /* ---------- boot ---------- */
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
 window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; boot(); }));
 
 function boot() {
@@ -253,7 +255,8 @@ function boot() {
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
   if (tabs.length === 1) $('tabs').style.display = 'none';
   $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
-    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="safeLogout()">ออกจากระบบ</a>';
+    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="safeLogout()">ออกจากระบบ</a>' +
+    `<div style="font-size:12px;color:#999">เวอร์ชัน v${esc((window.APP_VERSION || {}).version || '?')}</div>`;
   $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
   document.addEventListener('click', () => $('menu').classList.remove('on'));
   $('q').oninput = renderGrid;
@@ -266,6 +269,7 @@ function boot() {
 const CAT_CACHE = 'pos_catalog_cache';
 function applyCatalog() {
   $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
+  POS.showLogo && POS.showLogo(cat.settings.logo_url || '');
   if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
   showEvent();
   cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));

@@ -18,7 +18,7 @@ import json, os, re, shutil, subprocess, sys, datetime
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KEEP = 3
 FILES = ['index.html', 'admin.html', 'styles.css', 'config.js', 'api.js', 'offline.js', 'requisition.js',
-         'report.js', 'version.js', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png',
+         'report.js', 'receipt.js', 'version.js', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png',
          'icons/apple-touch-icon.png', 'apps-script/Code.gs']
 
 
@@ -82,7 +82,7 @@ def stamp(ver):
     for f in ['index.html', 'admin.html']:
         p = os.path.join(ROOT, f)
         s = open(p, encoding='utf8').read()
-        s = re.sub(r'(src="(?:config|api|requisition|report|offline|version)\.js|href="styles\.css)(\?v=[^"]*)?"', r'\1?v=' + tag + '"', s)
+        s = re.sub(r'(src="(?:config|api|requisition|report|receipt|offline|version)\.js|href="styles\.css)(\?v=[^"]*)?"', r'\1?v=' + tag + '"', s)
         open(p, 'w', encoding='utf8').write(s)
     p = os.path.join(ROOT, 'apps-script', 'Code.gs')
     s = open(p, encoding='utf8').read()
