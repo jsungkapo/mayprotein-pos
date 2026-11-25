@@ -6,6 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
+const SERVER_VERSION = '1.8'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -41,7 +42,7 @@ const DEFAULT_SETTINGS = {
 /* ---------------- HTTP ---------------- */
 
 function doGet() {
-  return json_({ ok: true, app: 'MayProtein POS API' });
+  return json_({ ok: true, app: 'MayProtein POS API', version: SERVER_VERSION });
 }
 
 function doPost(e) {
@@ -327,7 +328,7 @@ function auth_(token) {
   return u;
 }
 
-function me_(p, user) { return { user: publicUser_(user) }; }
+function me_(p, user) { return { user: publicUser_(user), server_version: SERVER_VERSION }; }
 
 function logout_(p, user, token) {
   CacheService.getScriptCache().remove('tok_' + token);
@@ -754,6 +755,7 @@ function getImage_(p) {
 function getAdminData_() {
   const data = JSON.parse(JSON.stringify(cachedCatalog_(true)));
   data.users = readTable_('Users').map(publicUser_);
+  data.server_version = SERVER_VERSION;
   return data;
 }
 

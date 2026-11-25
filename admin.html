@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261125b">
+<link rel="stylesheet" href="styles.css?v=1.8">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -183,9 +183,10 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="config.js?v=20261125b"></script>
-<script src="api.js?v=20261125b"></script>
-<script src="requisition.js?v=20261125b"></script>
+<script src="version.js?v=1.8"></script>
+<script src="config.js?v=1.8"></script>
+<script src="api.js?v=1.8"></script>
+<script src="requisition.js?v=1.8"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -786,6 +787,20 @@ function renderUsers() {
 }
 
 /* ---------- settings ---------- */
+function versionHtml() {
+  const V = window.APP_VERSION || { version: '?', history: [], backups: [] };
+  const sv = D.server_version || '';
+  const warn = sv && sv !== V.version ? `<div class="hint" style="color:var(--warn)">หน้าเว็บ v${esc(V.version)} แต่เซิร์ฟเวอร์ v${esc(sv)} — กด 🔄 อัปเดตระบบ แล้วรอสักครู่</div>` : '';
+  const bk = (V.backups || []).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee">
+      <span><b>v${esc(v)}</b> <span class="hint">${esc(((V.history || []).find(h => h.version === v) || {}).notes || '')}</span></span>
+      <span style="white-space:nowrap"><a href="versions/v${esc(v)}/index.html" target="_blank">หน้าขาย</a> · <a href="versions/v${esc(v)}/admin.html" target="_blank">หลังบ้าน</a></span></div>`).join('') || '<div class="hint">ยังไม่มี</div>';
+  const hist = (V.history || []).slice(0, 15).map(h => `<tr><td style="white-space:nowrap"><b>v${esc(h.version)}</b><div class="hint" style="margin:0">${esc(String(h.date || '').slice(0, 10))}</div></td><td>${esc(h.notes)}</td></tr>`).join('');
+  return `<div class="sec" id="verSec"><h4>เวอร์ชัน <span class="tag ok">v${esc(V.version)}</span></h4>
+    <div class="hint">หน้าเว็บ v${esc(V.version)} · เซิร์ฟเวอร์ ${sv ? 'v' + esc(sv) : '-'} · แก้ล่าสุด ${esc(V.date || '')}</div>${warn}
+    <label>สำรองเวอร์ชันเก่า (เก็บ 3 เวอร์ชันล่าสุด)</label>${bk}
+    <div class="hint">เปิดเวอร์ชันเก่าได้ทันทีโดยใช้ข้อมูลชุดเดียวกัน ถ้าต้องการย้อนกลับทั้งระบบ บอก Claude ว่า “ย้อนกลับเป็นเวอร์ชัน x”</div>
+    <label>ประวัติการแก้ไข</label><table>${hist}</table></div>`;
+}
 function renderSettings() {
   const s = { ...D.settings };
   const el = $('setBox');
@@ -801,7 +816,8 @@ function renderSettings() {
       <div class="sec" id="qrSec"><h4>QR พร้อมเพย์</h4>${imgBlock(s.promptpay_qr_image_url, '📱', 'qr')}</div>
       <br><button class="btn" id="sSave">บันทึกการตั้งค่า</button>
       <div class="sec"><h4>อัปเดตระบบ</h4><div class="hint" style="margin-bottom:8px">ปกติระบบอัปเดตเองภายใน 5–10 นาทีหลังมีการแก้ไข กดปุ่มนี้ถ้าอยากได้เวอร์ชันล่าสุดทันที (หรือกด 🔄 มุมขวาบน)</div>
-      <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>`;
+      <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>
+      ${versionHtml()}`;
     bindImg($('qrSec'), () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
     bindImg($('logoSec'), () => s.logo_url, (u, re) => { if (re === false) { s.logo_url = u; return; } keep(); s.logo_url = u; render(); }, 'logo');
     $('sSave').onclick = async () => {

@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="May POS">
+<meta name="theme-color" content="#e8336d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>MayProtein POS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
+<link rel="stylesheet" href="styles.css?v=20261125b">
+<style>
+body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+main{flex:1;overflow-y:auto;min-height:0}
+.chips{display:flex;gap:8px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.chip{padding:6px 14px;border-radius:20px;background:#fff;border:1px solid #ddd;white-space:nowrap;font-size:14px;cursor:pointer}
+.chip.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.search{margin-bottom:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px}
+.card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px #0001;text-align:center;cursor:pointer;position:relative;user-select:none}
+.card:active{transform:scale(.97)}
+.badge{position:absolute;top:6px;right:6px;background:var(--pink);color:#fff;border-radius:12px;min-width:24px;height:24px;font-size:13px;font-weight:700;line-height:24px;padding:0 6px;z-index:1}
+.img{aspect-ratio:1;background:var(--pink-soft);display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden}
+.img img{width:100%;height:100%;object-fit:cover}
+.card .n{font-size:13px;padding:6px 4px 0;height:36px;overflow:hidden;line-height:1.35}
+.card .p{font-weight:700;color:var(--pink);padding-bottom:4px}
+.card .s{font-size:11px;color:#888;padding-bottom:6px}
+.card .s.low{color:var(--bad);font-weight:700}
+.pk .img{background:#fff3c4}
+#cartPanel{flex:none;background:#fff;border-top:2px solid var(--pink);box-shadow:0 -4px 10px #0001;display:flex;flex-direction:column;max-height:38vh}
+.cartHead{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-weight:700;font-size:14px;border-bottom:1px solid #eee;flex:none}
+.cartHead a{font-weight:400;font-size:13px}
+#lines{overflow-y:auto;flex:1;min-height:40px;padding:0 12px}
+.line{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f2f2f2;font-size:14px}
+.line .nm{flex:1;min-width:0}
+.line small{display:block;color:#888;font-size:11px}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:30px;height:30px;border-radius:50%;border:1px solid #ccc;background:#fff;font-size:16px;line-height:1}
+.qty b{min-width:18px;text-align:center}
+.lt{width:64px;text-align:right;font-weight:700}
+.payWrap{padding:8px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom));flex:none}
+.pay{display:flex;gap:8px;margin-top:4px}
+.pay button{flex:1;padding:12px 4px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px}
+.pay button.on{border-color:var(--pink);background:var(--pink-soft);font-weight:700}
+.tot{display:flex;justify-content:space-between;font-size:20px;font-weight:700;margin:14px 0}
+.slip{display:flex;align-items:center;gap:10px;background:#f6f7f9;border-radius:10px;padding:10px;margin-top:10px}
+.slip img{width:64px;height:84px;object-fit:cover;border-radius:6px;flex:none;background:#ddd}
+.slip .t{flex:1;font-size:13px;color:#555}
+.slip .t b{display:block;color:var(--text);font-size:14px}
+.slip .acts{display:flex;flex-direction:column;gap:6px}
+.cxl{margin-top:8px;padding:8px 10px;border-radius:8px;background:#fde4e4;color:var(--bad);font-size:13px;line-height:1.5}
+.bill.cancelled .h b.amt{text-decoration:line-through;color:#aaa}
+.netbar{display:none;flex:none;padding:7px 12px;font-size:13px;font-weight:700;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}
+.netbar.on{display:flex}
+.netbar.off{background:#3a3a3c;color:#fff}.netbar.wait{background:#fff3d6;color:#8a5a00}.netbar.err{background:#fde4e4;color:var(--bad)}
+.netbar button{border:0;border-radius:14px;padding:4px 10px;font-size:12px;background:rgba(255,255,255,.85);color:#333;font-weight:700}
+.pend{background:#fffaf0;border:1px dashed #e8b84a;border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+.pend .e{color:var(--bad);font-size:12px;margin-top:4px}
+.sliptag{border:1px solid var(--pink);background:var(--pink-soft);color:var(--pink);font-weight:700;padding:3px 9px}
+#mSlip{z-index:45}
+#mSlip img{max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--line)}
+#dayTable td,#dayTable th{font-size:13px;padding:6px 4px}
+.qrimg{display:block;max-width:280px;width:100%;margin:10px auto;border-radius:8px}
+.qrfull{position:fixed;inset:0;background:#fff;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.qrfull.on{display:flex}
+.qrfull img{max-width:92vw;max-height:70vh}
+.qrfull .amt{font-size:32px;font-weight:800;color:var(--pink);margin:14px 0}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.kpi div{background:#fff;border-radius:12px;padding:12px;font-size:13px;color:#666}
+.kpi b{display:block;font-size:22px;color:var(--pink);margin-top:2px}
+.pktotal{margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:#f1f1f4;font-size:15px;text-align:center}
+.pktotal .big{font-size:30px;font-weight:800}
+.pkfix{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #eee;font-size:15px}
+.pkno{width:20px;flex:none;align-self:center;color:var(--muted);font-weight:700;text-align:center}
+.pkx{width:34px;flex:none;border:0;background:#eee;border-radius:50%;font-size:15px}
+.pktotal.ok{background:#e1f5ea;color:var(--ok)}.pktotal.over{background:#fde4e4;color:var(--bad)}
+.pkaddrow{display:inline-block;font-size:13px;margin-top:2px}
+.pkdel{margin-left:8px;font-size:13px;color:var(--bad)!important}
+.pkslot{background:#fafafa;border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px}
+.pkh{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
+.pkh span{color:var(--muted);font-size:13px}
+.pkst{margin-left:auto;font-weight:700;padding:2px 10px;border-radius:12px;background:#eee;color:#666!important}
+.pkst.ok{background:#e1f5ea;color:var(--ok)!important}.pkst.over{background:#fde4e4;color:var(--bad)!important}
+.pkrow{display:flex;gap:8px;margin-bottom:6px}
+.pkrow select{flex:1;min-width:0}
+.qbtn{width:64px;flex:none;border:1.5px solid var(--pink);border-radius:8px;background:#fff;font-size:20px;font-weight:800;color:var(--pink)}
+.qbtn.zero{border-color:#ccc;color:#bbb}
+#mNum{z-index:30}
+.numpad{max-width:380px}
+.npt{font-size:14px;color:var(--muted);text-align:center}
+.npv{font-size:44px;font-weight:800;text-align:center;margin:6px 0 12px;color:var(--pink)}
+.npk{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.npk button{height:58px;border:0;border-radius:12px;background:#f1f1f4;font-size:26px;font-weight:600}
+.npk button:active{background:#ddd}
+.npk button.fn{font-size:17px;color:#666}
+.opt{display:flex;flex-wrap:wrap;gap:6px}
+.opt button{padding:9px 12px;border:1px solid #ccc;border-radius:8px;background:#fff}
+.opt button.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.ok{text-align:center}
+.ok .ic{font-size:52px}
+.ok .bn{font-size:34px;font-weight:800;color:var(--pink);letter-spacing:1px;margin:4px 0}
+.rc{background:#fafafa;border-radius:10px;padding:10px;text-align:left;margin:12px 0;font-size:14px}
+.rc .r{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
+.rc small{color:#888;display:block;font-size:11px}
+.bill{background:#fff;border-radius:12px;margin-bottom:8px;overflow:hidden}
+.bill .h{display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer}
+.bill .h b{color:var(--pink)}
+.bill .d{display:none;padding:0 12px 12px;font-size:13px}
+.bill.open .d{display:block}
+.menu{position:absolute;right:10px;top:54px;background:#fff;border-radius:12px;box-shadow:0 6px 24px #0003;z-index:30;display:none;min-width:180px;overflow:hidden}
+.menu.on{display:block}
+.menu a,.menu div{display:block;padding:12px 16px;color:var(--text);border-bottom:1px solid #f0f0f0;font-size:15px;text-decoration:none}
+.menu div{color:var(--muted);font-size:12px}
+tr.low td{color:var(--bad)}
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.7 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+<header class="top">
+  <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div></div>
+  <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
+</header>
+<div class="netbar" id="netBar" onclick="openPending()"></div>
+<div class="menu" id="menu"></div>
+<div class="tabs" id="tabs"></div>
+
+<main>
+  <div class="page on" id="p-sell">
+    <input class="search" id="q" placeholder="🔍 ค้นหาสินค้า / SKU" autocomplete="off">
+    <div class="chips" id="chips"></div>
+    <div class="grid" id="grid"><div class="loading"><span class="spin dark"></span>กำลังโหลดสินค้า</div></div>
+  </div>
+
+  <div class="page" id="p-bills">
+    <div class="box" style="display:flex;justify-content:space-between;align-items:center">
+      <span>บิลวันนี้ <b id="bCnt">0</b> บิล<span id="bSumWrap"> · รวม <b id="bSum" style="color:var(--pink)">0</b> ฿</span></span>
+      <button class="btn sm line" onclick="loadToday(true)">↻</button>
+    </div>
+    <div id="billList"></div>
+  </div>
+
+  <div class="page" id="p-sum">
+    <div class="box">
+      <div class="row"><div><label>ตั้งแต่วันที่</label><input type="date" id="rFrom"></div><div><label>ถึงวันที่</label><input type="date" id="rTo"></div></div>
+      <div class="chips" id="rQuick" style="margin:10px 0 8px"><div class="chip" data-q="today">วันนี้</div><div class="chip" data-q="yday">เมื่อวาน</div><div class="chip" data-q="7">7 วันล่าสุด</div><div class="chip" data-q="month">เดือนนี้</div></div>
+      <button class="btn" id="rGo">ดูสรุปยอดขาย</button>
+    </div>
+    <div id="sumBody" style="display:none">
+      <div class="kpi">
+        <div style="grid-column:1/-1">ยอดขายสุทธิ<b id="kTotal">0</b><small id="kRange" style="color:#888"></small></div>
+        <div>จำนวนบิล<b id="kBills">0</b></div>
+        <div>ส่วนลดรวม<b id="kDisc">0</b></div>
+        <div>💵 เงินสด<b id="kCash">0</b></div>
+        <div>🏦 โอน<b id="kTr">0</b></div>
+      </div>
+      <div class="box"><b>สรุปรายวัน</b><table id="dayTable"></table></div>
+      <div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
+      <div class="box"><b>สินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><table id="itTable"></table></div>
+      <button class="btn" id="rPdf">📄 ดาวน์โหลดรายงาน PDF</button><br><br>
+      <button class="btn line" onclick="downloadCsv()">⬇️ ดาวน์โหลดข้อมูลบิล (CSV)</button><br><br>
+    </div>
+  </div>
+</main>
+
+<div id="cartPanel">
+  <div class="cartHead"><span>🛒 ตะกร้า (<span id="cnt">0</span> ชิ้น)</span><a onclick="clearCart()">ล้างตะกร้า</a></div>
+  <div id="lines"></div>
+  <div class="payWrap"><button class="btn" onclick="openCheckout()">ชำระเงิน · <span id="sum">0</span> บาท</button></div>
+</div>
+
+<div class="modal" id="mVar"><div class="sheet" id="varSheet"></div></div>
+<div class="modal" id="mPk"><div class="sheet" id="pkSheet"></div></div>
+<div class="modal" id="mNum"><div class="sheet numpad">
+  <div class="npt" id="npTitle"></div>
+  <div class="npv" id="npVal">0</div>
+  <div class="npk"><button onclick="npKey('1')">1</button><button onclick="npKey('2')">2</button><button onclick="npKey('3')">3</button><button onclick="npKey('4')">4</button><button onclick="npKey('5')">5</button><button onclick="npKey('6')">6</button><button onclick="npKey('7')">7</button><button onclick="npKey('8')">8</button><button onclick="npKey('9')">9</button><button class="fn" onclick="npKey('clr')">ล้าง</button><button onclick="npKey('0')">0</button><button class="fn" onclick="npKey('del')">⌫</button></div>
+  <button class="btn" onclick="npOk()">ตกลง</button><br><br><button class="btn g" onclick="closeM('mNum')">ยกเลิก</button>
+</div></div>
+<div class="modal" id="mOk"><div class="sheet ok" id="okSheet"></div></div>
+<div class="modal" id="mPay"><div class="sheet">
+  <h3>ชำระเงิน</h3>
+  <div class="tot"><span>รวม</span><span id="sub">0</span></div>
+  <label>ส่วนลดท้ายบิล</label>
+  <div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()" style="flex:none;width:90px"><option value="baht">บาท</option><option value="percent">%</option></select></div>
+  <label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
+  <label>วิธีชำระเงิน</label>
+  <div class="pay" id="pay"><button class="on" data-m="cash">💵 เงินสด</button><button data-m="transfer">🏦 โอน / QR</button></div>
+  <div id="qrBox" style="display:none;text-align:center"></div>
+  <div id="slipBox" style="display:none"></div>
+  <input type="file" id="slipIn" accept="image/*" capture="environment" style="display:none">
+  <div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
+  <button class="btn" id="payBtn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
+  <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
+</div></div>
+<div class="qrfull" id="qrFull" onclick="this.classList.remove('on')"></div>
+<div class="modal" id="mAsk"><div class="sheet">
+  <h3>ออกรายงานสรุปยอดขาย</h3>
+  <label>เป็นงานขายอะไร (จะแสดงเป็นหัวรายงาน)</label><input id="askTitle" placeholder="เช่น ATM">
+  <div class="hint" id="askHint" style="font-size:12px;color:#888;margin-top:6px"></div>
+  <br><button class="btn" id="askOk">สร้าง PDF</button><br><br><button class="btn g" onclick="closeM('mAsk')">ยกเลิก</button>
+</div></div>
+<div class="modal" id="mPend"><div class="sheet">
+  <h3>บิลที่รอส่งขึ้นระบบ</h3>
+  <div class="hint" style="font-size:12px;color:#888;margin-bottom:8px">บิลเหล่านี้ขายตอนไม่มีเน็ตและเก็บไว้ในเครื่องนี้ ระบบจะส่งขึ้นเองเมื่อมีเน็ต อย่าลบแอปหรือล้างข้อมูล Safari จนกว่าจะส่งครบ</div>
+  <div id="pendList"></div>
+  <br><button class="btn" id="pendSync">📤 ส่งตอนนี้</button><br><br><button class="btn g" onclick="closeM('mPend')">ปิด</button>
+</div></div>
+<div class="modal" id="mCancel"><div class="sheet">
+  <h3 id="cxTitle" style="color:var(--bad)">ยกเลิกบิล?</h3>
+  <div id="cxInfo" style="font-size:14px;line-height:1.6;background:#fff5f5;border-radius:10px;padding:10px"></div>
+  <label>ยืนยันตัวตน: ชื่อผู้ใช้ของคุณ *</label><input id="cxUser" autocapitalize="none" autocorrect="off" autocomplete="off">
+  <label>สาเหตุที่ยกเลิก *</label><textarea id="cxReason" rows="2" placeholder="เช่น ลูกค้าขอเปลี่ยนรส"></textarea>
+  <div class="chips" style="margin-top:8px"><div class="chip" onclick="$('cxReason').value='ลูกค้าขอเปลี่ยนสินค้า'">ลูกค้าขอเปลี่ยนสินค้า</div><div class="chip" onclick="$('cxReason').value='คีย์ผิด'">คีย์ผิด</div><div class="chip" onclick="$('cxReason').value='ลูกค้ายกเลิกการซื้อ'">ลูกค้ายกเลิกการซื้อ</div><div class="chip" onclick="$('cxReason').value='ชำระเงินไม่สำเร็จ'">ชำระเงินไม่สำเร็จ</div></div>
+  <br><button class="btn" id="cxOk" style="background:var(--bad)">ยืนยันยกเลิกบิล</button><br><br><button class="btn g" onclick="closeM('mCancel')">ไม่ยกเลิก</button>
+</div></div>
+<div class="modal" id="mSlip"><div class="sheet" style="text-align:center">
+  <h3 id="slipTitle">รูปสลิป</h3>
+  <div id="slipBody"></div>
+  <br><button class="btn g" onclick="closeM('mSlip')">ปิด</button>
+</div></div>
+
+<script src="config.js?v=20261125b"></script>
+<script src="api.js?v=20261125b"></script>
+<script src="requisition.js?v=20261125b"></script>
+<script src="report.js?v=20261125b"></script>
+<script src="offline.js?v=20261125b"></script>
+<script>
+const esc = POS.esc, money = POS.money;
+const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
+const EMOJI = { 'โปรตีน': '🥤', 'พรีเวิร์กเอาต์': '⚡', 'เสื้อผ้า': '👕', 'อุปกรณ์': '🧦', 'อาหารเสริม': '💊' };
+let me = null, cat = { products: [], variants: [], packages: [], settings: {} };
+let cart = [], chip = 'ทั้งหมด', method = 'cash', today = { bills: [] }, clientId = null, paying = false;
+
+const $ = id => document.getElementById(id);
+const P = id => cat.products.find(p => p.product_id === id);
+const V = id => cat.variants.find(v => v.variant_id === id);
+const varsOf = pid => cat.variants.filter(v => v.product_id === pid);
+function vName(v) { const p = P(v.product_id); return (p ? p.name : '') + ' ' + [v.size, v.color].filter(Boolean).join('/'); }
+function vPrice(v) { return v.price == null ? (P(v.product_id) || {}).price || 0 : v.price; }
+function itemName(id) { const p = P(id); if (p) return p.name; const v = V(id); return v ? vName(v) : id; }
+function itemStock(id) { const p = P(id); if (p && !p.has_variants) return p.stock_qty; const v = V(id); return v ? v.stock_qty : null; }
+function imgHtml(url, fallback) { return url ? `<img src="${esc(url)}" loading="lazy" alt="" onerror="POS.imgFix(this)">` : fallback; }
+function emojiOf(p) { return EMOJI[p.subcategory] || EMOJI[p.category] || '📦'; }
+
+/* ---------- boot ---------- */
+// เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
+window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
+window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; boot(); }));
+
+function boot() {
+  $('whoName').textContent = me.display_name;
+  const tabs = [['sell', '🛒 ขาย'], ['bills', POS.isAdmin() ? '🧾 รายการขาย' : '🧾 บิลวันนี้'], ...(POS.isAdmin() ? [['sum', '📊 สรุป']] : [])];
+  $('tabs').innerHTML = tabs.map(([k, l], i) => `<button data-t="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t, b));
+  if (tabs.length === 1) $('tabs').style.display = 'none';
+  $('menu').innerHTML = `<div>${esc(me.display_name)} · ${me.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'}</div>` +
+    (POS.isAdmin() ? '<a href="admin.html">⚙️ หลังบ้าน</a><a onclick="POS.updateSystem()">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</a>' : '') + '<a onclick="safeLogout()">ออกจากระบบ</a>';
+  $('menuBtn').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('on'); };
+  document.addEventListener('click', () => $('menu').classList.remove('on'));
+  $('q').oninput = renderGrid;
+  document.querySelectorAll('#pay button').forEach(b => b.onclick = () => { method = b.dataset.m; document.querySelectorAll('#pay button').forEach(x => x.classList.toggle('on', x === b)); renderQr(); renderSlip(); });
+  renderCart();
+  Offline.onChange(renderNetBar);
+  Offline.refresh().then(() => { loadCatalog(); Offline.sync(); Offline.schedule(); });
+}
+
+const CAT_CACHE = 'pos_catalog_cache';
+function applyCatalog() {
+  $('shopName').textContent = (cat.settings.shop_name || 'MayProtein') + ' POS';
+  POS.showLogo && POS.showLogo(cat.settings.logo_url || '');
+  if (!POS.pref('event') && cat.settings.current_event) POS.pref('event', cat.settings.current_event);
+  showEvent();
+  cart = cart.filter(c => c.type === 'package' ? cat.packages.some(k => k.package_id === c.id) : !!(P(c.id) || V(c.id)));
+  renderChips(); renderCart();
+  preloadQr();
+}
+/* รูป QR: โหลดผ่านเซิร์ฟเวอร์แล้วจำไว้ในเครื่อง จะได้ขึ้นแน่นอนและเร็ว แม้ลิงก์ Drive ใช้ไม่ได้ */
+let qrSrc = '';
+async function preloadQr() {
+  const url = cat.settings.promptpay_qr_image_url;
+  if (!url) { qrSrc = ''; return; }
+  try { qrSrc = await POS.imageData(url); if ($('qrImg')) $('qrImg').src = qrSrc; } catch (e) { qrSrc = ''; }
+}
+function saveCatalogCache() { try { localStorage.setItem(CAT_CACHE, JSON.stringify(cat)); } catch (e) {} }
+async function loadCatalog() {
+  // แสดงสินค้าที่จำไว้ในเครื่องทันที แล้วค่อยอัปเดตจากเซิร์ฟเวอร์
+  if (!cat.products.length) {
+    try { const c = JSON.parse(localStorage.getItem(CAT_CACHE) || 'null'); if (c && c.products) { cat = c; applyCatalog(); } } catch (e) {}
+  }
+  try {
+    const r = await POS.call('getCatalog', null, { timeout: 30000 });
+    delete r.ok;
+    cat = r;
+    // บิลที่ยังค้างส่ง: หักสต็อกบนจอไว้ก่อน เซิร์ฟเวอร์ยังไม่รู้
+    Offline.items.forEach(it => applyDeductions(it.payload, -1));
+    saveCatalogCache();
+    applyCatalog();
+    return;
+  } catch (e) { if (!(e.network && cat.products.length)) POS.toast(e.message, true); if (!cat.products.length) $('grid').innerHTML = `<div class="empty">${esc(e.message)}<br><br><a onclick="loadCatalog()">ลองใหม่</a></div>`; }
+}
+
+function safeLogout() {
+  if (Offline.count && !confirm(`ยังมีบิลรอส่ง ${Offline.count} บิลในเครื่องนี้ ถ้าออกจากระบบ บิลจะยังอยู่ แต่จะส่งได้ต่อเมื่อเข้าสู่ระบบอีกครั้ง ออกจากระบบเลยไหม?`)) return;
+  POS.logout();
+}
+function showEvent() { const ev = POS.pref('event') || ''; $('evName').textContent = '📍 ' + (ev || 'แตะเพื่อใส่ชื่องาน'); }
+function editEvent() {
+  const v = prompt('ชื่องาน / สถานที่ (บันทึกกับทุกบิลจากเครื่องนี้)', POS.pref('event') || '');
+  if (v === null) return;
+  POS.pref('event', v.trim()); showEvent(); POS.toast('บันทึกชื่องานแล้ว');
+}
+
+function tab(k, b) {
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + k));
+  $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('cartPanel').style.display = k === 'sell' ? 'flex' : 'none';
+  if (k === 'bills') loadToday();
+  if (k === 'sum') initSum();
+}
+
+/* ---------- sell ---------- */
+function renderChips() {
+  const cats = [...new Set(cat.products.map(p => p.category).filter(Boolean))];
+  const cs = ['ทั้งหมด', ...(cat.packages.length ? ['แพ็กเกจ'] : []), ...cats];
+  if (!cs.includes(chip)) chip = 'ทั้งหมด';
+  $('chips').innerHTML = cs.map(c => `<div class="chip ${c === chip ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}</div>`).join('');
+  $('chips').querySelectorAll('.chip').forEach(el => el.onclick = () => { chip = el.dataset.c; renderChips(); renderGrid(); });
+  renderGrid();
+}
+function inCart(id) { return cart.filter(c => c.id === id || c.pid === id).reduce((a, c) => a + c.qty, 0); }
+function badge(n) { return n ? `<div class="badge">${n}</div>` : ''; }
+function stockTxt(n) { return `<div class="s ${n <= 0 ? 'low' : ''}">คงเหลือ ${n}</div>`; }
+function renderGrid() {
+  const q = $('q').value.trim().toLowerCase();
+  const hit = (...s) => !q || s.some(x => String(x || '').toLowerCase().includes(q));
+  let h = '';
+  if (chip === 'ทั้งหมด' || chip === 'แพ็กเกจ') h += cat.packages.filter(k => hit(k.name)).map(k => `<div class="card pk" onclick="openPk('${k.package_id}')">${badge(inCart(k.package_id))}<div class="img">${imgHtml(k.image_url, '🎁')}</div><div class="n">${esc(k.name)}</div><div class="p">${money(k.price)}฿</div><div class="s">แพ็กเกจ</div></div>`).join('');
+  if (chip !== 'แพ็กเกจ') h += cat.products.filter(p => (chip === 'ทั้งหมด' || p.category === chip) && hit(p.name, p.sku, p.subcategory, ...varsOf(p.product_id).map(v => v.sku))).map(p => {
+    const vs = varsOf(p.product_id);
+    const st = p.has_variants ? vs.reduce((a, v) => a + v.stock_qty, 0) : p.stock_qty;
+    const price = p.has_variants && vs.length ? Math.min(...vs.map(vPrice)) : p.price;
+    return `<div class="card" onclick="tapP('${p.product_id}')">${badge(inCart(p.product_id))}<div class="img">${imgHtml(p.image_url, emojiOf(p))}</div><div class="n">${esc(p.name)}</div><div class="p">${money(price)}฿</div>${stockTxt(st)}</div>`;
+  }).join('');
+  $('grid').innerHTML = h || '<div class="empty" style="grid-column:1/-1">ไม่พบสินค้า</div>';
+}
+function addLine(line) { const ex = cart.find(c => c.key === line.key); if (ex) ex.qty++; else cart.push({ ...line, qty: 1 }); renderCart(); }
+function tapP(id) {
+  const p = P(id);
+  if (p.has_variants) return openVar(p);
+  addLine({ key: id, type: 'product', id, name: p.name, price: p.price });
+}
+function openVar(p) {
+  const vs = varsOf(p.product_id);
+  $('varSheet').innerHTML = `<h3>${esc(p.name)}</h3>` + (vs.length ? `<div class="opt">${vs.map(v => `<button onclick="addVar('${v.variant_id}')">${esc([v.size, v.color].filter(Boolean).join(' / '))} <small style="opacity:.7">(${v.stock_qty})</small></button>`).join('')}</div>` : '<div class="empty">ยังไม่มีตัวเลือกไซซ์/สี</div>') + `<br><button class="btn g" onclick="closeM('mVar')">ปิด</button>`;
+  $('mVar').classList.add('on');
+}
+function addVar(vid) { const v = V(vid); closeM('mVar'); addLine({ key: vid, type: 'variant', id: vid, pid: v.product_id, name: vName(v), price: vPrice(v) }); }
+
+/* ---------- package picker ----------
+ * สินค้าติดแพ็กเกจ (ล็อกไว้) + ช่องสินค้าที่เลือกเองจากรายการที่หลังบ้านติ๊กไว้ กด "เพิ่มช่องสินค้า" ได้เรื่อยๆ
+ * ต้องรวมครบ "จำนวนชิ้นทั้งหมด" ที่ตั้งไว้หลังบ้านพอดี */
+let pk = null;
+function pkDef(k) {
+  if (k.pool) return { fixed: k.fixed || [], pool: k.pool, total: k.total || 0 };
+  const pool = [...new Set(k.slots.flatMap(s => s.items))];
+  return { fixed: [], pool, total: k.total_qty || k.slots.reduce((a, s) => a + (s.qty || 0), 0) };
+}
+function openPk(id) {
+  const k = cat.packages.find(x => x.package_id === id);
+  const d = pkDef(k);
+  pk = { k, ...d, fixedQty: d.fixed.reduce((a, f) => a + f.qty, 0), rows: [] };
+  if (pk.total - pk.fixedQty > 0) pk.rows.push({ id: d.pool.length === 1 ? d.pool[0] : '', qty: d.pool.length === 1 ? pk.total - pk.fixedQty : 0 });
+  renderPk();
+  $('mPk').classList.add('on');
+  $('mPk').querySelector('.sheet').scrollTop = 0;
+}
+const pkChosen = () => pk.rows.reduce((a, r) => a + (r.id ? r.qty || 0 : 0), 0);
+const pkTotal = () => pk.fixedQty + pkChosen();
+function renderPk() {
+  const k = pk.k, total = pkTotal(), need = pk.total;
+  const tcls = need ? (total === need ? 'ok' : total > need ? 'over' : '') : '';
+  const left = need - total;
+  $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}
+    <div class="pktotal ${tcls}"><span class="big">${total} / ${need || '-'}</span> ชิ้น<br><small>${tcls === 'ok' ? 'ครบแล้ว ✓' : tcls === 'over' ? `เกินมา ${-left} ชิ้น` : `ต้องเลือกเพิ่มอีก ${left} ชิ้น`}</small></div>
+    ${pk.fixed.length ? `<div class="pkslot"><div class="pkh"><b>สินค้าติดแพ็กเกจ</b><span>ใส่ให้อัตโนมัติ</span></div>${pk.fixed.map(f => `<div class="pkfix">🔒 ${esc(itemName(f.id))}<b>× ${f.qty}</b></div>`).join('')}</div>` : ''}
+    ${pk.total - pk.fixedQty > 0 || pk.rows.length ? `<div class="pkslot"><div class="pkh"><b>เลือกสินค้า</b><span>เลือกได้ ${Math.max(0, pk.total - pk.fixedQty)} ชิ้น</span></div>
+      ${pk.rows.map((r, i) => `<div class="pkrow"><span class="pkno">${i + 1}</span><select data-i="${i}"><option value="">— เลือกสินค้า —</option>${pk.pool.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-i="${i}">${r.qty}</button>${pk.rows.length > 1 ? `<button class="pkx" data-rm="${i}">✕</button>` : ''}</div>`).join('')}
+      <button class="btn line" id="pkAddRow" style="margin-top:6px;display:flex;justify-content:center;align-items:center" ${left <= 0 ? 'disabled' : ''}>+ เพิ่มช่องสินค้า</button></div>` : ''}
+    <br><button class="btn" onclick="addPk()" ${tcls !== 'ok' && need ? 'disabled' : ''}>เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
+  $('pkSheet').querySelectorAll('select[data-i]').forEach(el => el.onchange = () => {
+    const r = pk.rows[+el.dataset.i];
+    const had = !!r.id; r.id = el.value;
+    if (!r.id) r.qty = 0;
+    else if (!had || !r.qty) { r.qty = 0; r.qty = Math.max(1, Math.min(1, pk.total - pkTotal())); }
+    renderPk();
+  });
+  $('pkSheet').querySelectorAll('.qbtn').forEach(b => b.onclick = () => {
+    const r = pk.rows[+b.dataset.i];
+    numpad(`${r.id ? itemName(r.id) : 'จำนวน'} · ต้องการอีก ${Math.max(0, pk.total - pkTotal() + (r.id ? r.qty : 0))} ชิ้น`, r.qty, v => { r.qty = v; renderPk(); });
+  });
+  $('pkSheet').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { pk.rows.splice(+b.dataset.rm, 1); renderPk(); });
+  const add = $('pkAddRow');
+  if (add) add.onclick = () => {
+    if (pk.rows.some(r => !r.id)) return POS.toast('เลือกสินค้าในช่องที่ว่างอยู่ก่อน', true);
+    pk.rows.push({ id: '', qty: 0 }); renderPk();
+    const sels = $('pkSheet').querySelectorAll('select[data-i]'); sels[sels.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+}
+function addPk() {
+  const k = pk.k, merged = {};
+  for (const r of pk.rows) {
+    if (r.qty > 0 && !r.id) return POS.toast('เลือกสินค้าให้ช่องที่ใส่จำนวนไว้', true);
+    if (r.id && r.qty > 0) merged[r.id] = (merged[r.id] || 0) + r.qty;
+  }
+  const total = pkTotal();
+  if (pk.total && total !== pk.total) return POS.toast(`แพ็กเกจนี้ต้องมีสินค้ารวม ${pk.total} ชิ้น (ตอนนี้ ${total})`, true);
+  if (!total) return POS.toast('ยังไม่ได้เลือกสินค้า', true);
+  const pool = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
+  const short = id => itemName(id).replace(/^May Protein /, '');
+  const desc = [...pk.fixed.map(f => short(f.id) + '×' + f.qty), ...pool.map(x => short(x.id) + '×' + x.qty)].join(', ');
+  closeM('mPk');
+  addLine({ key: k.package_id + '|' + JSON.stringify(pool), type: 'package', id: k.package_id, name: k.name, price: k.price, selections: { pool }, desc });
+}
+
+/* ---------- numpad ---------- */
+let np = null;
+function numpad(title, value, onOk) {
+  np = { v: String(value || ''), onOk, fresh: true };
+  $('npTitle').textContent = title;
+  renderNp();
+  $('mNum').classList.add('on');
+}
+function renderNp() { $('npVal').textContent = np.v === '' ? '0' : np.v; }
+function npKey(k) {
+  if (k === 'del') np.v = np.fresh ? '' : np.v.slice(0, -1);
+  else if (k === 'clr') np.v = '';
+  else { if (np.fresh) np.v = ''; if (np.v.length < 3) np.v = (np.v === '0' ? '' : np.v) + k; }
+  np.fresh = false;
+  renderNp();
+}
+function npOk() { const v = parseInt(np.v || '0', 10) || 0; closeM('mNum'); np.onOk(v); }
+
+function chg(i, d) { cart[i].qty += d; if (cart[i].qty <= 0) cart.splice(i, 1); renderCart(); }
+function clearCart() { if (cart.length && confirm('ล้างสินค้าทั้งหมดในตะกร้า?')) { cart = []; renderCart(); } }
+function cartTotal() { return cart.reduce((a, c) => a + c.price * c.qty, 0); }
+function renderCart() {
+  $('lines').innerHTML = cart.map((c, i) => `<div class="line"><div class="nm">${esc(c.name)}${c.desc ? `<small>${esc(c.desc)}</small>` : ''}<small>${money(c.price)}฿ / ชิ้น</small></div><div class="qty"><button onclick="chg(${i},-1)">−</button><b>${c.qty}</b><button onclick="chg(${i},1)">+</button></div><div class="lt">${money(c.price * c.qty)}฿</div></div>`).join('') || '<div class="empty">แตะสินค้าด้านบนเพื่อเพิ่มลงตะกร้า</div>';
+  $('sum').textContent = money(cartTotal());
+  $('cnt').textContent = cart.reduce((a, c) => a + c.qty, 0);
+  renderGrid();
+}
+function closeM(m) { $(m).classList.remove('on'); }
+
+/* ---------- checkout ---------- */
+function openCheckout() { if (!cart.length) return; clientId = POS.uuid(); $('mPay').classList.add('on'); calc(); renderQr(); renderSlip(); }
+
+/* ---------- รูปสลิป (โอน / พร้อมเพย์) ---------- */
+let slip = null;
+const needsSlip = () => method === 'transfer';
+function renderSlip() {
+  const box = $('slipBox');
+  if (!needsSlip()) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = slip
+    ? `<div class="slip"><img src="${slip.preview}" alt="สลิป"><div class="t"><b>✅ ถ่ายรูปสลิปแล้ว</b>จะบันทึกไว้กับบิลนี้</div><div class="acts"><button class="btn sm line" onclick="takeSlip()">ถ่ายใหม่</button><button class="btn sm g" onclick="slip=null;renderSlip()">ลบ</button></div></div>`
+    : `<div class="slip"><div class="t"><b>📷 รูปสลิปการโอน</b>ถ่ายรูปสลิปบนมือถือลูกค้าเก็บไว้เป็นหลักฐาน (ถ้ายังไม่ถ่าย จะเปิดกล้องให้ตอนกดยืนยัน)</div><button class="btn sm" onclick="takeSlip()">ถ่ายรูป</button></div>`;
+}
+async function takeSlip() {
+  const file = await POS.pickFile($('slipIn'));
+  if (!file) return false;
+  try {
+    const data = await POS.jpegImage(file, 1280, 0.7);
+    slip = { data, preview: 'data:image/jpeg;base64,' + data };
+    renderSlip();
+    return true;
+  } catch (e) { POS.toast(e.message, true); return false; }
+}
+function calc() {
+  const s = cartTotal(), d = Math.max(0, +$('disc').value || 0), t = $('dtype').value;
+  const da = Math.min(s, t === 'percent' ? s * Math.min(d, 100) / 100 : d);
+  $('sub').textContent = money(s); $('net').textContent = money(s - da);
+  if ($('qrFull').classList.contains('on')) renderQr();
+  return { s, da, net: s - da };
+}
+function renderQr() {
+  const box = $('qrBox');
+  if (method !== 'transfer') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const url = cat.settings.promptpay_qr_image_url;
+  box.innerHTML = url ? `<img class="qrimg" id="qrImg" src="${esc(qrSrc || url)}" alt="QR" data-keep="1" onerror="POS.imgFix(this)"><button class="btn sm line" onclick="showQrFull()">🔍 แสดง QR เต็มจอให้ลูกค้าสแกน</button>` : '<div class="empty" style="padding:6px 0">ยังไม่ได้อัปโหลดรูป QR พร้อมเพย์ (ตั้งค่าได้ที่หลังบ้าน) · ลูกค้าโอนเข้าบัญชีได้ตามปกติ</div>';
+}
+function showQrFull() {
+  const url = cat.settings.promptpay_qr_image_url;
+  $('qrFull').innerHTML = `<img src="${esc(qrSrc || url)}" alt="QR" onerror="POS.imgFix(this)"><div class="amt">${money(calc().net)} บาท</div><div style="color:#888">แตะเพื่อปิด</div>`;
+  $('qrFull').classList.add('on');
+}
+async function pay() {
+  if (paying) return;
+  if (needsSlip() && !slip) {
+    // เปิดกล้องทันทีจากการกดปุ่มยืนยัน
+    const got = await takeSlip();
+    if (!got && !confirm('ยังไม่มีรูปสลิป บันทึกการขายต่อเลยไหม?')) return;
+  }
+  const { net } = calc();
+  paying = true; $('payBtn').disabled = true; $('payBtn').innerHTML = '<span class="spin"></span> กำลังบันทึก';
+  const payload = {
+    client_id: clientId, event_name: POS.pref('event') || '', payment_method: method,
+    discount_type: $('dtype').value, discount_value: +$('disc').value || 0, note: $('note').value.trim(),
+    slip_data: needsSlip() && slip ? slip.data : '',
+    lines: cart.map(c => ({ type: c.type, id: c.id, qty: c.qty, selections: c.selections }))
+  };
+  try {
+    let r;
+    try { r = await POS.call('createSale', payload, { timeout: 25000 }); }
+    catch (e) {
+      if (!e.network) throw e;
+      await saveOffline(payload);
+      return;
+    }
+    const b = r.bill;
+    if (Math.abs(b.total - net) > 0.01) POS.toast('ยอดสุทธิจากเซิร์ฟเวอร์: ' + money(b.total) + ' บาท');
+    if (r.auto_hidden && r.auto_hidden.length) setTimeout(() => POS.toast('สินค้าหมด ปิดขายอัตโนมัติ: ' + r.auto_hidden.join(', '), true), 600);
+    cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
+    $('disc').value = 0; $('note').value = ''; clientId = null; slip = null;
+    $('okSheet').innerHTML = `<div class="ic">✅</div><div>ขายสำเร็จ</div><div class="bn">${esc(b.bill_id)}</div><small style="color:#888">${esc(b.datetime)}</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
+    $('mOk').classList.add('on');
+    b.items.forEach(i => { if (i.package_id && !i.slot) return; const p = P(i.item_id), v = V(i.item_id); if (p) p.stock_qty -= i.qty; if (v) v.stock_qty -= i.qty; });
+    saveCatalogCache(); renderGrid();
+    loadCatalog();
+  } catch (e) { POS.toast(e.message, true); }
+  finally { paying = false; $('payBtn').disabled = false; $('payBtn').textContent = '✅ ยืนยันการขาย'; }
+}
+
+/* ---------- ขายตอนออฟไลน์ ---------- */
+const pad2 = n => String(n).padStart(2, '0');
+const localStamp = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+/** หัก (sign=-1) หรือคืน (+1) สต็อกบนจอตามบิล */
+function applyDeductions(payload, sign) {
+  const add = (id, q) => { const p = P(id), v = V(id); if (p && !p.has_variants) p.stock_qty += sign * q; if (v) v.stock_qty += sign * q; };
+  (payload.lines || []).forEach(l => {
+    if (l.type !== 'package') return add(l.id, l.qty);
+    const k = cat.packages.find(x => x.package_id === l.id);
+    if (k) pkDef(k).fixed.forEach(f => add(f.id, f.qty * l.qty));
+    ((l.selections || {}).pool || []).forEach(x => add(x.id, x.qty * l.qty));
+  });
+}
+/** สร้างใบเสร็จในเครื่อง (ตัวเลขเดียวกับที่เซิร์ฟเวอร์จะคำนวณ) */
+function localBill(payload, no, when) {
+  const items = []; let sub = 0, setNo = 0;
+  cart.forEach(c => {
+    if (c.type !== 'package') { items.push({ item_id: c.id, item_name: c.name, qty: c.qty, unit_price: c.price, line_total: c.price * c.qty, package_id: '', slot: '' }); sub += c.price * c.qty; return; }
+    setNo++;
+    items.push({ item_id: c.id, item_name: c.name, qty: c.qty, unit_price: c.price, line_total: c.price * c.qty, package_id: c.id, package_set_no: setNo, slot: '' });
+    sub += c.price * c.qty;
+    const k = cat.packages.find(x => x.package_id === c.id);
+    if (k) pkDef(k).fixed.forEach(f => items.push({ item_id: f.id, item_name: itemName(f.id), qty: f.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'ติดเซต' }));
+    ((c.selections || {}).pool || []).forEach(x => items.push({ item_id: x.id, item_name: itemName(x.id), qty: x.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'เลือก' }));
+  });
+  const d = Math.max(0, payload.discount_value), da = Math.min(sub, payload.discount_type === 'percent' ? sub * Math.min(d, 100) / 100 : d);
+  return { bill_id: 'รอส่ง #' + no, datetime: when, subtotal: sub, discount_type: payload.discount_type, discount_value: d, discount_amount: da, total: Math.round((sub - da) * 100) / 100, payment_method: payload.payment_method, note: payload.note, staff: me.display_name, items };
+}
+async function saveOffline(payload) {
+  const when = localStamp(new Date());
+  const no = Offline.nextNo();
+  const b = localBill(payload, no, when);
+  payload.offline = true; payload.sold_at = when;
+  try {
+    await Offline.add({ client_id: payload.client_id, payload, created_at: new Date().toISOString(), local_no: no, user: me.username, bill: b });
+  } catch (e) { POS.toast('บันทึกบิลในเครื่องไม่สำเร็จ: ' + e.message, true); return; }
+  applyDeductions(payload, -1);
+  saveCatalogCache();
+  cart = []; renderCart(); closeM('mPay'); $('qrFull').classList.remove('on');
+  $('disc').value = 0; $('note').value = ''; clientId = null; slip = null;
+  $('okSheet').innerHTML = `<div class="ic">📴</div><div>ขายสำเร็จ (ไม่มีอินเทอร์เน็ต)</div><div class="bn" style="color:#8a5a00">รอส่ง #${no}</div><small style="color:#888">${esc(when)} · บันทึกไว้ในเครื่องนี้ จะส่งขึ้นระบบเองเมื่อมีเน็ต</small>${receiptHtml(b)}<button class="btn" onclick="closeM('mOk')">🛒 บิลถัดไป</button>`;
+  $('mOk').classList.add('on');
+}
+
+/* แถบสถานะเน็ต / บิลรอส่ง */
+function renderNetBar() {
+  const bar = $('netBar'), n = Offline.count, errs = Offline.items.filter(x => x.error).length, off = navigator.onLine === false;
+  if (!n && !off) { bar.className = 'netbar'; return; }
+  bar.className = 'netbar on ' + (errs ? 'err' : off ? 'off' : 'wait');
+  bar.innerHTML = `<span>${off ? '📴 ไม่มีอินเทอร์เน็ต · ขายต่อได้ บิลจะเก็บไว้ในเครื่อง' : Offline.syncing ? '⏳ กำลังส่งบิลค้าง…' : '📤 มีบิลรอส่ง'}${n ? ` · รอส่ง ${n} บิล` : ''}${errs ? ` (ส่งไม่ผ่าน ${errs})` : ''}</span>${n && !off ? '<button>ดู / ส่ง</button>' : ''}`;
+  if ($('mPend').classList.contains('on')) renderPending();
+  if (document.getElementById('p-bills').classList.contains('on')) renderBills();
+}
+function openPending() { if (!Offline.count) return; renderPending(); $('mPend').classList.add('on'); }
+function renderPending() {
+  $('pendList').innerHTML = Offline.items.map(it => `<div class="pend"><div style="display:flex;justify-content:space-between"><b>รอส่ง #${it.local_no}</b><b>${money(it.bill.total)}฿</b></div>
+    <small style="color:#888">${esc(it.bill.datetime)} · ${esc(MLABEL[it.payload.payment_method] || '')} · ${esc(it.bill.staff)}${it.payload.slip_data ? ' · 📎 มีสลิป' : ''}</small>
+    ${it.error ? `<div class="e">ส่งไม่ผ่าน: ${esc(it.error)}</div><div style="margin-top:6px;display:flex;gap:6px"><button class="btn sm line" data-retry="${esc(it.client_id)}">ลองส่งอีกครั้ง</button>${POS.isAdmin() ? `<button class="btn sm danger" data-del="${esc(it.client_id)}">ทิ้งบิลนี้</button>` : ''}</div>` : ''}</div>`).join('') || '<div class="empty">ไม่มีบิลค้าง</div>';
+  $('pendList').querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => { await Offline.update(b.dataset.retry, { error: '' }); syncNow(); });
+  $('pendList').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const it = Offline.items.find(x => x.client_id === b.dataset.del);
+    if (!confirm(`ทิ้งบิล รอส่ง #${it.local_no} (${money(it.bill.total)} บาท)? บิลนี้จะไม่ถูกบันทึกเข้าระบบเลย`)) return;
+    applyDeductions(it.payload, +1); saveCatalogCache(); renderGrid();
+    await Offline.remove(it.client_id);
+  });
+  $('pendSync').onclick = syncNow;
+}
+async function syncNow() {
+  const b = $('pendSync'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังส่ง';
+  const r = await Offline.sync({ force: true, retryErrors: true });
+  b.disabled = false; b.textContent = '📤 ส่งตอนนี้';
+  if (r.stopped) POS.toast('ยังเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่เมื่อมีเน็ต', true);
+  else if (r.failed) POS.toast(`ส่งไม่ผ่าน ${r.failed} บิล ดูรายละเอียดในรายการ`, true);
+  if (!Offline.count) closeM('mPend');
+}
+Offline.onSent = sent => {
+  POS.toast(`ส่งบิลค้างขึ้นระบบแล้ว ${sent.length} บิล: ` + sent.map(b => `#${b.local_no} → ${b.bill_id}`).join(', '));
+  const hid = sent.flatMap(b => b.auto_hidden || []);
+  if (hid.length) setTimeout(() => POS.toast('สินค้าหมด ปิดขายอัตโนมัติ: ' + hid.join(', '), true), 2500);
+  loadCatalog();
+  if (document.getElementById('p-bills').classList.contains('on')) loadToday(true);
+};
+window.addEventListener('online', renderNetBar);
+window.addEventListener('offline', renderNetBar);
+function receiptHtml(b) {
+  const head = b.items.filter(i => !i.slot);
+  return `<div class="rc">${head.map(it => {
+    const comps = it.package_id ? b.items.filter(x => x.slot && x.package_set_no === it.package_set_no) : [];
+    return `<div class="r"><span>${esc(it.item_name)} × ${it.qty}${comps.length ? `<small>${comps.map(c => esc((/^[A-Z]{1,2}\d*$/.test(c.slot) ? c.slot + ': ' : c.slot === 'ติดเซต' ? '🔒' : '') + c.item_name.replace(/^May Protein /, '') + '×' + (c.qty / it.qty))).join(' · ')}</small>` : ''}</span><span>${money(it.line_total)}฿</span></div>`;
+  }).join('')}
+  <div class="r" style="border-top:1px dashed #ccc;margin-top:6px;padding-top:6px"><span>รวม</span><span>${money(b.subtotal)}฿</span></div>
+  ${b.discount_amount ? `<div class="r"><span>ส่วนลด${b.discount_type === 'percent' ? ' ' + b.discount_value + '%' : ''}</span><span>-${money(b.discount_amount)}฿</span></div>` : ''}
+  <div class="r"><b>ยอดสุทธิ</b><b>${money(b.total)}฿</b></div>
+  <div class="r"><small>ชำระโดย ${MLABEL[b.payment_method] || esc(b.payment_method)}</small><small>${esc(b.staff || '')}</small></div>
+  ${b.note ? `<div class="r"><small>หมายเหตุ: ${esc(b.note)}</small></div>` : ''}
+  ${b.status === 'cancelled' ? `<div class="cxl">❌ ยกเลิกแล้ว โดย ${esc(b.cancelled_by)} · ${esc(String(b.cancelled_at).slice(11, 16))} น.<br>สาเหตุ: ${esc(b.cancel_reason)}<br><small>คืนสินค้าเข้าสต็อกแล้ว</small></div>` : ''}
+  ${b.slip_url ? `<div class="r">${POS.isAdmin() ? `<button class="btn sm line" style="margin-top:6px" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูรูปสลิป</button>` : '<small>📎 เก็บรูปสลิปแล้ว</small>'}</div>` : ''}</div>`;
+}
+
+/* ---------- today bills (แอดมินและพนักงานขาย — ยกเลิกบิลได้) ---------- */
+async function loadToday(force) {
+  if (!today.bills.length || force) $('billList').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลด</div>';
+  try { today = await POS.call('todaySales'); renderBills(); }
+  catch (e) { renderBills(); POS.toast(e.network ? 'ไม่มีอินเทอร์เน็ต — แสดงเฉพาะบิลที่รอส่งในเครื่องนี้' : e.message, true); }
+}
+function renderBills() {
+  const bs = today.bills;
+  const live = bs.filter(b => b.status !== 'cancelled');
+  $('bCnt').textContent = live.length + (live.length !== bs.length ? ` (ยกเลิก ${bs.length - live.length})` : '');
+  $('bSum').textContent = money(live.reduce((a, b) => a + b.total, 0));
+  $('bSumWrap').style.display = POS.isAdmin() ? '' : 'none';
+  const pend = Offline.items.filter(it => POS.isAdmin() || it.user === me.username).map(it => `<div class="bill"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b style="color:#8a5a00">รอส่ง #${it.local_no}</b><span class="tag warn">${it.error ? 'ส่งไม่ผ่าน' : 'ยังไม่ขึ้นระบบ'}</span><span class="tag">${MLABEL[it.payload.payment_method] || ''}</span><br><small style="color:#888">${esc(it.bill.datetime.slice(11, 16))} น. · ${esc(it.bill.staff)}</small></span><b>${money(it.bill.total)}฿</b></div><div class="d">${receiptHtml(it.bill)}<small style="color:#888">ยกเลิกได้หลังส่งขึ้นระบบแล้ว</small></div></div>`).join('');
+  $('billList').innerHTML = pend + bs.map(b => `<div class="bill ${b.status === 'cancelled' ? 'cancelled' : ''}"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span><b>${esc(b.bill_id)}</b>${b.status === 'cancelled' ? '<span class="tag bad">ยกเลิก</span>' : ''}<span class="tag">${MLABEL[b.payment_method] || ''}</span>${b.slip_url ? `<button class="tag sliptag" onclick="event.stopPropagation();viewSlip('${esc(b.bill_id)}')">📎 ดูสลิป</button>` : ''}<br><small style="color:#888">${esc(b.datetime.slice(11, 16))} น. · ${b.items.filter(i => !i.slot).reduce((a, i) => a + i.qty, 0)} ชิ้น · ${esc(b.staff)}</small></span><b class="amt">${money(b.total)}฿</b></div><div class="d">${receiptHtml(b)}${b.status === 'cancelled' ? '' : `<button class="btn sm danger" style="margin-top:4px" onclick="event.stopPropagation();openCancel('${esc(b.bill_id)}')">ยกเลิกบิลนี้</button>`}</div></div>`).join('') || (pend ? '' : '<div class="empty">ยังไม่มีการขายวันนี้</div>');
+}
+
+/* ---------- ยกเลิกบิล ---------- */
+function openCancel(billId) {
+  const b = today.bills.find(x => x.bill_id === billId);
+  if (!b) return;
+  $('cxTitle').textContent = 'ยกเลิกบิล ' + billId + '?';
+  $('cxInfo').innerHTML = `ยอด <b>${money(b.total)} ฿</b> (${MLABEL[b.payment_method] || ''}) · ${esc(b.datetime.slice(11, 16))} น.<br>สินค้าในบิลนี้จะถูก <b>คืนเข้าสต็อก</b> และยกเลิกแล้วแก้คืนไม่ได้${b.payment_method !== 'cash' ? '<br>⚠️ บิลนี้รับเงินโอน อย่าลืมคืนเงินลูกค้าด้วย' : ''}`;
+  $('cxUser').value = ''; $('cxReason').value = '';
+  $('cxUser').placeholder = 'พิมพ์ชื่อผู้ใช้ของคุณ (' + me.username + ')';
+  $('cxOk').onclick = () => doCancel(billId);
+  $('mCancel').classList.add('on');
+}
+async function doCancel(billId) {
+  const username = $('cxUser').value.trim().toLowerCase(), reason = $('cxReason').value.trim();
+  if (username !== String(me.username).toLowerCase()) return POS.toast('ชื่อผู้ใช้ไม่ตรงกับบัญชีที่เข้าสู่ระบบอยู่', true);
+  if (!reason) return POS.toast('กรุณาใส่สาเหตุที่ยกเลิก', true);
+  const b = $('cxOk'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังยกเลิก';
+  try {
+    const r = await POS.call('cancelBill', { bill_id: billId, username, reason });
+    const i = today.bills.findIndex(x => x.bill_id === billId);
+    if (i >= 0) today.bills[i] = r.bill;
+    closeM('mCancel'); renderBills();
+    POS.toast('ยกเลิกบิล ' + billId + ' แล้ว · คืนสินค้าเข้าสต็อกแล้ว');
+    loadCatalog();
+  } catch (e) { POS.toast(e.message, true); }
+  b.disabled = false; b.textContent = 'ยืนยันยกเลิกบิล';
+}
+
+/* ---------- slip viewer ---------- */
+async function viewSlip(billId) {
+  $('slipTitle').textContent = 'รูปสลิป ' + billId;
+  $('slipBody').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังโหลดรูป</div>';
+  $('mSlip').classList.add('on');
+  try {
+    const r = await POS.call('getSlip', { bill_id: billId });
+    $('slipBody').innerHTML = `<img src="data:${esc(r.mime)};base64,${r.data}" alt="สลิป"><div style="margin-top:8px"><a href="${esc(r.url)}" target="_blank" rel="noopener">เปิดใน Google Drive</a></div>`;
+  } catch (e) { $('slipBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ---------- sales summary by date range (admin) ---------- */
+let sum = null;
+const iso = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+function initSum() {
+  if ($('rFrom').value) return;
+  const t = iso(new Date()); $('rFrom').value = t; $('rTo').value = t;
+  $('rQuick').querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    const now = new Date(), q = c.dataset.q;
+    let f = now, t2 = now;
+    if (q === 'yday') { f = t2 = new Date(now.getTime() - 86400000); }
+    if (q === '7') f = new Date(now.getTime() - 6 * 86400000);
+    if (q === 'month') f = new Date(now.getFullYear(), now.getMonth(), 1);
+    $('rFrom').value = iso(f); $('rTo').value = iso(t2);
+    $('rQuick').querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
+    loadSum();
+  });
+  $('rGo').onclick = loadSum;
+  $('rPdf').onclick = askReport;
+  loadSum();
+}
+async function loadSum() {
+  let from = $('rFrom').value, to = $('rTo').value || from;
+  if (!from) return POS.toast('เลือกวันที่เริ่ม', true);
+  if (to < from) { [from, to] = [to, from]; $('rFrom').value = from; $('rTo').value = to; }
+  const b = $('rGo'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังโหลด';
+  try { sum = await POS.call('todaySales', { from, to }); renderSum(); }
+  catch (e) { POS.toast(e.message, true); }
+  b.disabled = false; b.textContent = 'ดูสรุปยอดขาย';
+}
+function renderSum() {
+  const g = SalesReport.aggregate(sum.bills);
+  $('sumBody').style.display = 'block';
+  $('kTotal').textContent = money(g.net) + ' ฿';
+  $('kRange').textContent = (sum.from === sum.to ? PdfKit.thaiDate(sum.from) : `${PdfKit.thaiDate(sum.from)} – ${PdfKit.thaiDate(sum.to)}`) + (g.cancelled ? ` · ไม่รวมบิลที่ยกเลิก ${g.cancelled} บิล` : '');
+  $('kBills').textContent = g.bills; $('kCash').textContent = money(g.cash); $('kTr').textContent = money(g.transfer); $('kDisc').textContent = money(g.discount);
+  $('dayTable').innerHTML = '<tr><th>วันที่</th><th class="n">บิล</th><th class="n">เงินสด</th><th class="n">โอน</th><th class="n">สุทธิ</th></tr>' +
+    (g.days.map(d => `<tr><td>${esc(PdfKit.thaiDate(d.date))}</td><td class="n">${d.bills}</td><td class="n">${money(d.cash)}</td><td class="n">${money(d.transfer)}</td><td class="n"><b>${money(d.net)}</b></td></tr>`).join('') || '<tr><td colspan="5" class="empty">ไม่มีการขายในช่วงนี้</td></tr>') +
+    (g.days.length > 1 ? `<tr><td><b>รวม</b></td><td class="n"><b>${g.bills}</b></td><td class="n"><b>${money(g.cash)}</b></td><td class="n"><b>${money(g.transfer)}</b></td><td class="n"><b>${money(g.net)}</b></td></tr>` : '');
+  const rows = o => Object.entries(o).sort((a, b) => b[1] - a[1]);
+  $('pkTable').innerHTML = rows(g.packages).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v} เซต</td></tr>`).join('') || '<tr><td>-</td></tr>';
+  $('itTable').innerHTML = rows(g.items).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join('') || '<tr><td>-</td></tr>';
+}
+function askReport() {
+  if (!sum) return;
+  const events = [...new Set(sum.bills.map(b => b.event_name).filter(Boolean))];
+  $('askTitle').value = events.length === 1 ? events[0] : (POS.pref('event') || '');
+  $('askHint').textContent = events.length ? 'ชื่องานที่บันทึกไว้กับบิลในช่วงนี้: ' + events.join(', ') : '';
+  $('mAsk').classList.add('on');
+  setTimeout(() => $('askTitle').focus(), 100);
+  $('askOk').onclick = async () => {
+    const title = $('askTitle').value.trim();
+    if (!title) return POS.toast('ใส่ชื่องานขายก่อน เช่น ATM', true);
+    const b = $('askOk'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังสร้าง PDF';
+    try {
+      const blob = await SalesReport.pdf({ title, from: sum.from, to: sum.to, bills: sum.bills, shop: cat.settings.shop_name, by: me.display_name, printedAt: new Date().toLocaleString('th-TH') });
+      const name = `สรุปยอดขาย-${title.replace(/[\\/:*?"<>|]/g, '')}-${sum.from}${sum.to !== sum.from ? '_' + sum.to : ''}.pdf`;
+      const file = new File([blob], name, { type: 'application/pdf' });
+      closeM('mAsk');
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+        try { await navigator.share({ files: [file], title: name }); } catch (e) {}
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      }
+    } catch (e) { POS.toast(e.message, true); }
+    b.disabled = false; b.textContent = 'สร้าง PDF';
+  };
+}
+function downloadCsv() {
+  if (!sum) return;
+  const g = SalesReport.aggregate(sum.bills), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const out = [['สรุปยอดขาย', sum.from, sum.to], ['ยอดขายสุทธิ', g.net], ['จำนวนบิล', g.bills], ['เงินสด', g.cash], ['โอน', g.transfer], ['ส่วนลดรวม', g.discount], [],
+    ['วันที่', 'บิล', 'เงินสด', 'โอน', 'ส่วนลด', 'สุทธิ'], ...g.days.map(d => [d.date, d.bills, d.cash, d.transfer, d.discount, d.net]), [],
+    ['แพ็กเกจ', 'จำนวนเซต'], ...Object.entries(g.packages), [], ['สินค้า', 'จำนวน'], ...Object.entries(g.items), [],
+    ['bill_id', 'datetime', 'event', 'staff', 'payment', 'item', 'slot', 'qty', 'unit_price', 'line_total', 'bill_subtotal', 'bill_discount', 'bill_total', 'note', 'slip_url', 'status', 'cancel_reason']];
+  sum.bills.slice().reverse().forEach(b => b.items.forEach((i, n) => out.push([b.bill_id, b.datetime, b.event_name, b.staff, SalesReport.normMethod(b.payment_method), i.item_name, i.slot, i.qty, i.unit_price, i.line_total, n ? '' : b.subtotal, n ? '' : b.discount_amount, n ? '' : b.total, n ? '' : b.note, n ? '' : b.slip_url, n ? '' : (b.status === 'cancelled' ? 'ยกเลิก' : ''), n ? '' : b.cancel_reason])));
+  const csv = '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `mayprotein-sales-${sum.from}${sum.to !== sum.from ? '_' + sum.to : ''}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+if ('serviceWorker' in navigator) Promise.resolve().catch(() => {});
+</script></body></html>
