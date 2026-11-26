@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.10">
+<link rel="stylesheet" href="styles.css?v=1.11">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -135,9 +135,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
       <summary style="font-weight:700;cursor:pointer">ปรับสต็อกรายการเดียว (เพิ่ม / ลด ไม่ออกใบเบิก)</summary>
       <label>ชื่องาน / สถานที่</label><input id="stEv" placeholder="เช่น Bangkok Fit Expo">
       <label>สินค้า</label><select id="stItem"></select>
-      <label>จำนวน (ใส่ติดลบเพื่อลด)</label><input type="number" inputmode="numeric" id="stQty" value="10">
+      <label>ปรับสต็อก</label>
+      <div class="seg" id="stDir"><button type="button" data-d="1" class="on">➕ เพิ่ม</button><button type="button" data-d="-1">➖ ลด</button></div>
+      <label id="stQtyLbl">จำนวนที่เพิ่ม</label><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" id="stQty" value="10">
       <label>หมายเหตุ</label><input id="stNote" placeholder="เช่น ของเสียหาย">
-      <br><br><button class="btn" id="stBtn">บันทึกสต็อก</button>
+      <br><br><button class="btn" id="stBtn">บันทึก (เพิ่มสต็อก)</button>
     </details>
     <div class="box">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>สต็อกคงเหลือ</b><a onclick="load().then(renderStockTab)">↻ รีเฟรช</a></div>
@@ -183,11 +185,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.10"></script>
-<script src="config.js?v=1.10"></script>
-<script src="api.js?v=1.10"></script>
-<script src="requisition.js?v=1.10"></script>
-<script src="receipt.js?v=1.10"></script>
+<script src="version.js?v=1.11"></script>
+<script src="config.js?v=1.11"></script>
+<script src="api.js?v=1.11"></script>
+<script src="requisition.js?v=1.11"></script>
+<script src="receipt.js?v=1.11"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -617,8 +619,15 @@ function renderStockTab() {
   });
 }
 $('stQ').oninput = renderStockTab;
+let stDir = 1;
+$('stDir').querySelectorAll('button').forEach(b => b.onclick = () => {
+  stDir = +b.dataset.d;
+  $('stDir').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('stQtyLbl').textContent = stDir < 0 ? 'จำนวนที่ลด' : 'จำนวนที่เพิ่ม';
+  $('stBtn').textContent = stDir < 0 ? 'บันทึก (ลดสต็อก)' : 'บันทึก (เพิ่มสต็อก)';
+});
 $('stBtn').onclick = async () => {
-  const id = $('stItem').value, q = Math.round(+$('stQty').value || 0);
+  const id = $('stItem').value, q = stDir * Math.abs(Math.round(+String($('stQty').value).replace(/[^0-9.]/g, '') || 0));
   if (!id || !q) return POS.toast('เลือกสินค้าและใส่จำนวน', true);
   const ev = $('stEv').value.trim(); POS.pref('event', ev);
   const b = $('stBtn'); busy(b, true);
