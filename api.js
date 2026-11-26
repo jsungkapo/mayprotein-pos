@@ -13,11 +13,15 @@
     NETWORK: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบอินเทอร์เน็ตหรือ URL ของเซิร์ฟเวอร์'
   };
 
+  const adminRole = r => r === 'admin' || r === 'master';
   const POS = {
     apiUrl() { return LS.get('pos_api_url') || (window.POS_CONFIG && window.POS_CONFIG.API_URL) || ''; },
     token() { return LS.get('pos_token') || ''; },
     user() { try { return JSON.parse(LS.get('pos_user') || 'null'); } catch (e) { return null; } },
-    isAdmin() { const u = this.user(); return !!u && u.role === 'admin'; },
+    // สิทธิ์: master (สูงสุด) > admin > seller
+    isAdmin() { const u = this.user(); return !!u && (u.role === 'admin' || u.role === 'master'); },
+    isMaster() { const u = this.user(); return !!u && u.role === 'master'; },
+    roleLabel(r) { return { master: 'มาสเตอร์', admin: 'แอดมิน', seller: 'พนักงานขาย' }[r] || r; },
     saveSession(token, user) { LS.set('pos_token', token); LS.set('pos_user', JSON.stringify(user)); },
     clearSession() { LS.del('pos_token'); LS.del('pos_user'); LS.del('pos_admin_cache'); },
     pref(k, v) { if (v === undefined) return LS.get('pos_pref_' + k); LS.set('pos_pref_' + k, v); },
@@ -76,11 +80,12 @@
       opts = opts || {};
       const u = this.user();
       if (u && this.token()) {
-        if (opts.adminOnly && u.role !== 'admin') { showLogin('หน้านี้สำหรับแอดมินเท่านั้น', true); return; }
+        if (opts.adminOnly && !adminRole(u.role)) { showLogin('หน้านี้สำหรับแอดมินเท่านั้น', true); return; }
         onReady(u);
         this.call('me').then(r => {
           this.saveSession(this.token(), r.user);
-          if (opts.adminOnly && r.user.role !== 'admin') location.reload();
+          // สิทธิ์เปลี่ยน (เช่น ถูกตั้งเป็นมาสเตอร์) → โหลดหน้าใหม่ให้เมนูตรงกับสิทธิ์
+          if ((opts.adminOnly && !adminRole(r.user.role)) || r.user.role !== u.role) location.reload();
         }).catch(() => {});
         return;
       }
@@ -127,14 +132,14 @@
               if (mode === 'register') {
                 const r = await POS.call('register', { username, pin, display_name: el.querySelector('#lfName').value.trim() });
                 mode = 'login';
-                if (r.user.status === 'active') { msg = 'สมัครสำเร็จ คุณเป็นแอดมินคนแรก เข้าสู่ระบบได้เลย'; }
+                if (r.user.status === 'active') { msg = 'สมัครสำเร็จ คุณเป็นมาสเตอร์ (ผู้ใช้คนแรก) เข้าสู่ระบบได้เลย'; }
                 else { msg = 'สมัครสำเร็จ รอแอดมินอนุมัติแล้วค่อยเข้าสู่ระบบ'; }
                 isErr = false; render();
                 el.querySelector('#lfUser').value = username;
                 return;
               }
               const r = await POS.call('login', { username, pin });
-              if (opts.adminOnly && r.user.role !== 'admin') throw new Error('หน้านี้สำหรับแอดมินเท่านั้น');
+              if (opts.adminOnly && !adminRole(r.user.role)) throw new Error('หน้านี้สำหรับแอดมินเท่านั้น');
               POS.saveSession(r.token, r.user);
               el.classList.remove('on');
               onReady(r.user);

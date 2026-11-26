@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.8'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.11'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -36,7 +36,16 @@ const DEFAULT_SETTINGS = {
   categories: 'อาหารเสริม,เสื้อผ้า,อุปกรณ์',
   subcategories: 'โปรตีน,พรีเวิร์กเอาต์,More',
   units: 'ซอง,ชิ้น',
-  department: 'Protein'
+  department: 'Protein',
+  receipt_name: '',
+  receipt_address: '',
+  receipt_phone: '',
+  receipt_tax_id: '',
+  receipt_footer: 'ขอบคุณที่อุดหนุนค่ะ',
+  receipt_logo: 'on',
+  receipt_qr: 'none',
+  receipt_qr_url: '',
+  receipt_qr_label: ''
 };
 
 /* ---------------- HTTP ---------------- */
@@ -108,7 +117,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v9')) return;
+  if (cache.get('setup_ok_v11')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -127,11 +136,19 @@ function ensureSetup_() {
     const s = sh_(n);
     s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns()).setNumberFormat('@');
   });
-  const settings = settingsMap_();
-  Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
-    if (!(k in settings)) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
+  // คอลัมน์ค่าเป็นข้อความ (เบอร์โทร / เลขภาษี ไม่ให้เลข 0 หน้าหาย)
+  const st = sh_('Settings');
+  st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
+  // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
+  withLock_(function () {
+    if (cache.get('setup_ok_v11')) return;
+    const have = {};
+    readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
+    Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
+      if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
+    });
+    cache.put('setup_ok_v11', '1', 21600);
   });
-  cache.put('setup_ok_v9', '1', 21600);
 }
 
 function headers_(name) {
@@ -197,7 +214,8 @@ function withLock_(fn) {
 
 function settingsMap_() {
   const o = {};
-  readTable_('Settings').forEach(function (r) { if (r.key) o[r.key] = str_(r.value); });
+  // ถ้ามีคีย์ซ้ำ ใช้แถวแรกที่มีค่า (แถวว่างที่ซ้ำไม่ทับค่าที่กรอกไว้)
+  readTable_('Settings').forEach(function (r) { if (r.key && (!(r.key in o) || (o[r.key] === '' && str_(r.value) !== ''))) o[r.key] = str_(r.value); });
   return o;
 }
 
@@ -206,7 +224,9 @@ function settingsMap_() {
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
   description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
-  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก'
+  categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก',
+  receipt_name: 'ชื่อบนใบเสร็จ', receipt_address: 'ที่อยู่', receipt_phone: 'เบอร์โทร', receipt_tax_id: 'เลขประจำตัวผู้เสียภาษี',
+  receipt_footer: 'ข้อความท้ายใบเสร็จ', receipt_logo: 'โลโก้บนใบเสร็จ', receipt_qr: 'QR ท้ายใบเสร็จ', receipt_qr_url: 'รูป QR ท้ายใบเสร็จ', receipt_qr_label: 'คำอธิบาย QR'
 };
 
 /** สรุปว่าค่าไหนเปลี่ยนจากอะไรเป็นอะไร (oldRow = null แปลว่าสร้างใหม่) */
@@ -927,8 +947,8 @@ function saveSettings_(p, user) {
     if (d) log_(user, 'แก้ไข', 'ตั้งค่า', '', '', d);
     Object.keys(p || {}).forEach(function (k) {
       if (allowed.indexOf(k) < 0) return;
-      const r = rows.filter(function (x) { return x.key === k; })[0];
-      if (r) updateRow_('Settings', r._row, { value: str_(p[k]) });
+      const rs = rows.filter(function (x) { return x.key === k; });
+      if (rs.length) rs.forEach(function (r) { updateRow_('Settings', r._row, { value: str_(p[k]) }); });
       else appendRow_('Settings', { key: k, value: str_(p[k]) });
     });
     catalogChanged_();
@@ -1140,7 +1160,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v9');
+  CacheService.getScriptCache().remove('setup_ok_v11');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

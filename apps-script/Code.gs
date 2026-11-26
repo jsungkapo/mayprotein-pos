@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.11'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.12'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -79,20 +79,51 @@ const ADMIN_ACTIONS = {
   getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
-  saveSettings: saveSettings_, uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_, addStock: addStock_,
-  createRequisition: createRequisition_, listRequisitions: listRequisitions_, getSlip: getSlip_
+  uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_,
+  createRequisition: createRequisition_, listRequisitions: listRequisitions_, getSlip: getSlip_,
+  setProductsActive: setProductsActive_
 };
+// เฉพาะ master (สิทธิ์สูงสุด): ตั้งค่าระบบ + ปรับสต็อกรายการเดียว
+const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_ };
+
+/** สิทธิ์: master > admin > seller */
+function isAdmin_(u) { return !!u && (u.role === 'admin' || u.role === 'master'); }
+function isMaster_(u) { return !!u && u.role === 'master'; }
+const ROLE_LABEL = { master: 'มาสเตอร์', admin: 'แอดมิน', seller: 'พนักงานขาย' };
+
+/** ระบบเดิมยังไม่มี master → ตั้งแอดมินคนแรก (แถวบนสุดในชีต Users) เป็น master อัตโนมัติ ครั้งเดียว */
+function ensureMaster_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('master_ok_v1')) return;
+  withLock_(function () {
+    const users = readTable_('Users');
+    if (!users.some(function (u) { return u.role === 'master'; })) {
+      const first = users.filter(function (u) { return u.role === 'admin' && u.status === 'active'; })[0];
+      if (first) {
+        updateRow_('Users', first._row, { role: 'master' });
+        cache.remove('usr_' + first.user_id);
+        log_(first, 'แก้ไข', 'พนักงาน', first.user_id, first.display_name, 'สิทธิ์: มาสเตอร์ (ตั้งอัตโนมัติ — แอดมินคนแรก)');
+      }
+    }
+    cache.put('master_ok_v1', '1', 21600);
+  });
+}
 
 function route_(req) {
   ensureSetup_();
   const action = req.action;
   const p = req.payload || {};
   if (PUBLIC_ACTIONS[action]) return PUBLIC_ACTIONS[action](p);
+  ensureMaster_();
   const user = auth_(req.token);
   if (USER_ACTIONS[action]) return USER_ACTIONS[action](p, user, req.token);
   if (ADMIN_ACTIONS[action]) {
-    if (user.role !== 'admin') throw new Error('forbidden');
+    if (!isAdmin_(user)) throw new Error('forbidden');
     return ADMIN_ACTIONS[action](p, user);
+  }
+  if (MASTER_ACTIONS[action]) {
+    if (!isMaster_(user)) throw new Error('เฉพาะมาสเตอร์เท่านั้น');
+    return MASTER_ACTIONS[action](p, user);
   }
   throw new Error('unknown_action');
 }
@@ -297,10 +328,10 @@ function register_(p) {
     const user = {
       user_id: nextId_(users, 'user_id', 'U', 3), username: username, display_name: display,
       pin_hash: hash_(pin, salt), salt: salt,
-      role: first ? 'admin' : 'seller', status: first ? 'active' : 'pending', created_at: now_()
+      role: first ? 'master' : 'seller', status: first ? 'active' : 'pending', created_at: now_()
     };
     appendRow_('Users', user);
-    log_(user, 'สมัคร', 'พนักงาน', user.user_id, display, first ? 'เป็นแอดมินคนแรก' : 'รออนุมัติ');
+    log_(user, 'สมัคร', 'พนักงาน', user.user_id, display, first ? 'เป็นมาสเตอร์ (ผู้ใช้คนแรก)' : 'รออนุมัติ');
     return { user: publicUser_(user) };
   });
 }
@@ -690,7 +721,7 @@ function cleanItem_(r) {
 /** บิลตามช่วงวันที่ (from–to รวมทั้งสองวัน รูปแบบ yyyy-MM-dd) ถ้าไม่ระบุ = วันนี้ */
 function todaySales_(p, user) {
   // พนักงานขายดูได้เฉพาะบิลของวันนี้ (ไว้ยกเลิกบิล) แอดมินเลือกช่วงวันที่ได้
-  const admin = user && user.role === 'admin';
+  const admin = isAdmin_(user);
   const from = admin ? (str_(p.from) || str_(p.date) || today_()) : today_();
   const to = admin ? (str_(p.to) || from) : from;
   if (to < from) throw new Error('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม');
@@ -716,7 +747,7 @@ function cancelBill_(p, user) {
     const bill = readTable_('Sales').filter(function (r) { return str_(r.bill_id) === billId; })[0];
     if (!bill) throw new Error('ไม่พบบิล ' + billId);
     if (str_(bill.status) === 'cancelled') throw new Error('บิลนี้ถูกยกเลิกไปแล้ว');
-    if (user.role !== 'admin' && str_(bill.datetime).slice(0, 10) !== today_()) throw new Error('พนักงานขายยกเลิกได้เฉพาะบิลของวันนี้');
+    if (!isAdmin_(user) && str_(bill.datetime).slice(0, 10) !== today_()) throw new Error('พนักงานขายยกเลิกได้เฉพาะบิลของวันนี้');
     const items = readTable_('SaleItems').filter(function (r) { return str_(r.bill_id) === billId; });
     const idx = stockIndex_();
     const back = {};
@@ -784,9 +815,12 @@ function updateUser_(p, admin) {
     const u = readTable_('Users').filter(function (x) { return x.user_id === str_(p.user_id); })[0];
     if (!u) throw new Error('ไม่พบผู้ใช้');
     const patch = {};
+    // แอดมินแก้บัญชีของมาสเตอร์ไม่ได้ และตั้งใครเป็นมาสเตอร์ไม่ได้
+    if (u.role === 'master' && !isMaster_(admin)) throw new Error('แก้ไขบัญชีมาสเตอร์ได้เฉพาะมาสเตอร์');
     if (p.role) {
-      if (['admin', 'seller'].indexOf(p.role) < 0) throw new Error('role ไม่ถูกต้อง');
-      if (u.user_id === admin.user_id && p.role !== 'admin') throw new Error('เปลี่ยนสิทธิ์ของตัวเองไม่ได้');
+      if (['master', 'admin', 'seller'].indexOf(p.role) < 0) throw new Error('role ไม่ถูกต้อง');
+      if (p.role === 'master' && !isMaster_(admin)) throw new Error('ตั้งเป็นมาสเตอร์ได้เฉพาะมาสเตอร์');
+      if (u.user_id === admin.user_id && p.role !== admin.role) throw new Error('เปลี่ยนสิทธิ์ของตัวเองไม่ได้');
       patch.role = p.role;
     }
     if (p.status) {
@@ -803,7 +837,7 @@ function updateUser_(p, admin) {
     CacheService.getScriptCache().remove('usr_' + u.user_id);
     if (patch.status && patch.status !== 'active') revokeSessions_(u.user_id);
     const what = [];
-    if (patch.role && patch.role !== u.role) what.push('สิทธิ์: ' + (patch.role === 'admin' ? 'แอดมิน' : 'พนักงานขาย'));
+    if (patch.role && patch.role !== u.role) what.push('สิทธิ์: ' + (ROLE_LABEL[patch.role] || patch.role));
     if (patch.status && patch.status !== u.status) what.push(patch.status === 'active' ? (u.status === 'pending' ? 'อนุมัติ' : 'เปิดบัญชี') : patch.status === 'disabled' ? (u.status === 'pending' ? 'ไม่อนุมัติ' : 'ปิดบัญชี') : patch.status);
     if (patch.pin_hash) what.push('รีเซ็ต PIN');
     if (what.length) log_(admin, 'แก้ไข', 'พนักงาน', u.user_id, u.display_name, what.join(' · '));
@@ -816,6 +850,27 @@ function revokeSessions_(userId) {
   readTable_('Sessions').filter(function (r) { return r.user_id === userId; }).reverse().forEach(function (r) {
     CacheService.getScriptCache().remove('tok_' + r.token);
     s.deleteRow(r._row);
+  });
+}
+
+/** เปิด/ปิดขายสินค้าหลายรายการพร้อมกัน: { ids: [product_id...], active: true/false } */
+function setProductsActive_(p, user) {
+  const ids = (p.ids || []).map(str_).filter(String);
+  if (!ids.length) throw new Error('ยังไม่ได้เลือกสินค้า');
+  const active = p.active === true || String(p.active) === 'true';
+  return withLock_(function () {
+    const want = {};
+    ids.forEach(function (id) { want[id] = true; });
+    const rows = readTable_('Products').filter(function (r) { return want[str_(r.product_id)]; });
+    if (!rows.length) throw new Error('ไม่พบสินค้า');
+    const changed = rows.filter(function (r) { return bool_(r.active) !== active; });
+    changed.forEach(function (r) { updateRow_('Products', r._row, { active: active }); });
+    if (changed.length) {
+      catalogChanged_();
+      log_(user, 'แก้ไข', 'สินค้า', changed.map(function (r) { return r.product_id; }).join(','),
+        changed.length + ' รายการ', (active ? 'เปิดขาย: ' : 'ปิดขาย: ') + changed.map(function (r) { return r.name; }).join(', '));
+    }
+    return { changed: changed.length, ids: changed.map(function (r) { return str_(r.product_id); }) };
   });
 }
 
