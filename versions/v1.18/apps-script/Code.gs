@@ -6,17 +6,20 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.15'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.18'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
 const IMAGE_FOLDER = 'MayProtein POS Images';
 const SLIP_FOLDER = 'MayProtein POS Slips'; // รูปสลิปเก็บแบบส่วนตัว (ไม่แชร์ลิงก์)
+const BUG_FOLDER = 'MayProtein POS Bug Reports'; // รูปแนบรายงานปัญหา (ส่วนตัว)
+const BUG_STATUS = ['ใหม่', 'กำลังแก้', 'แก้แล้ว', 'ไม่แก้'];
 
 const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
-  Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty'],
+  BugReports: ['report_id', 'created_at', 'user_id', 'username', 'display_name', 'title', 'detail', 'images', 'app_version', 'device', 'status', 'resolution', 'updated_at', 'updated_by'],
+  Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty', 'lock_fixed'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
   Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url', 'status', 'cancelled_at', 'cancelled_by', 'cancel_reason'],
@@ -74,7 +77,7 @@ function json_(o) {
 }
 
 const PUBLIC_ACTIONS = { register: register_, login: login_ };
-const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_, todaySales: todaySales_, cancelBill: cancelBill_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_, todaySales: todaySales_, cancelBill: cancelBill_, submitBug: submitBug_ };
 const ADMIN_ACTIONS = {
   getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
@@ -84,7 +87,7 @@ const ADMIN_ACTIONS = {
   setProductsActive: setProductsActive_
 };
 // เฉพาะ master (สิทธิ์สูงสุด): ตั้งค่าระบบ + ปรับสต็อกรายการเดียว
-const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_ };
+const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_, listBugs: listBugs_, updateBug: updateBug_, getBugImage: getBugImage_ };
 
 /** สิทธิ์: master > admin > seller */
 function isAdmin_(u) { return !!u && (u.role === 'admin' || u.role === 'master'); }
@@ -148,7 +151,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v11')) return;
+  if (cache.get('setup_ok_v13')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -172,13 +175,13 @@ function ensureSetup_() {
   st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
   // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
   withLock_(function () {
-    if (cache.get('setup_ok_v11')) return;
+    if (cache.get('setup_ok_v13')) return;
     const have = {};
     readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
     Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
       if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
     });
-    cache.put('setup_ok_v11', '1', 21600);
+    cache.put('setup_ok_v13', '1', 21600);
   });
 }
 
@@ -254,7 +257,7 @@ function settingsMap_() {
 
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
-  description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
+  description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', lock_fixed: 'ล็อกสินค้าติดแพ็กเกจ', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
   categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก',
   receipt_name: 'ชื่อบนใบเสร็จ', receipt_address: 'ที่อยู่', receipt_phone: 'เบอร์โทร', receipt_tax_id: 'เลขประจำตัวผู้เสียภาษี',
   receipt_footer: 'ข้อความท้ายใบเสร็จ', receipt_logo: 'โลโก้บนใบเสร็จ', receipt_qr: 'QR ท้ายใบเสร็จ', receipt_qr_url: 'รูป QR ท้ายใบเสร็จ', receipt_qr_label: 'คำอธิบาย QR'
@@ -416,7 +419,7 @@ function loadPackagesRaw_() {
   return readTable_('Packages').map(function (r) {
     return {
       package_id: str_(r.package_id), name: str_(r.name), price: num_(r.price), description: str_(r.description),
-      image_url: str_(r.image_url), active: bool_(r.active), total_qty: Math.max(0, num_(r.total_qty)),
+      image_url: str_(r.image_url), active: bool_(r.active), total_qty: Math.max(0, num_(r.total_qty)), lock_fixed: bool_(r.lock_fixed),
       slots: slots.filter(function (s) { return str_(s.package_id) === str_(r.package_id); }).map(function (s) {
         return {
           slot: str_(s.slot), kind: str_(s.kind), qty: s.qty === '' ? 0 : Math.max(0, num_(s.qty)), lines: Math.max(1, num_(s.lines) || 1),
@@ -610,22 +613,38 @@ function createSale_(p, user) {
         setNo += 1;
         items.push({ item_id: k.package_id, item_name: k.name, qty: qty, unit_price: k.price, line_total: k.price * qty, package_id: k.package_id, package_set_no: setNo, slot: '' });
         subtotal += k.price * qty;
-        // สินค้าติดแพ็กเกจ (ใส่ให้อัตโนมัติ) + สินค้าที่เลือกเองจาก pool ต้องรวมครบจำนวนชิ้นทั้งหมดพอดี
+        // แบบใหม่ selections.items = ทุกชิ้นในเซต (สินค้าติดแพ็กเกจเป็นแค่ค่าเริ่มต้น หน้าร้านแก้ได้)
+        //   เลือกได้จาก สินค้าติดแพ็กเกจ + pool · รวมต้องครบจำนวนชิ้นทั้งหมดพอดี
+        // แบบเก่า selections.pool (บิลออฟไลน์ที่ค้างจากเวอร์ชันก่อน) = สินค้าติดแพ็กเกจใส่ให้อัตโนมัติ + ที่เลือกจาก pool
         const merged = {};
-        const picks = Array.isArray(ln.selections && ln.selections.pool) ? ln.selections.pool : [];
+        const isNew = Array.isArray(ln.selections && ln.selections.items);
+        const picks = isNew ? ln.selections.items : Array.isArray(ln.selections && ln.selections.pool) ? ln.selections.pool : [];
         picks.forEach(function (x) {
           const pid = str_(x && x.id), q = Math.round(num_(x && x.qty));
           if (pid && q > 0) merged[pid] = (merged[pid] || 0) + q;
         });
+        const fixedIds = k.fixed.map(function (f) { return f.id; });
         let pieces = 0;
-        k.fixed.forEach(function (f) {
+        // ล็อกไว้ (ตั้งที่หลังบ้าน): ต้องมีสินค้าติดแพ็กเกจครบตามที่ตั้ง ห้ามเปลี่ยน/ลบ
+        if (isNew && k.lock_fixed) k.fixed.forEach(function (f) {
+          if ((merged[f.id] || 0) < f.qty) throw new Error(k.name + ': สินค้าติดแพ็กเกจถูกล็อกไว้ ต้องมี ' + ((idx[f.id] || {}).name || f.id) + ' ×' + f.qty);
+        });
+        if (isNew) Object.keys(merged).forEach(function (chosen) {
+          if (k.pool.indexOf(chosen) < 0 && fixedIds.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
+          const it = idx[chosen];
+          if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
+          items.push({ item_id: chosen, item_name: it.name, qty: qty * merged[chosen], unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: fixedIds.indexOf(chosen) >= 0 ? 'ติดเซต' : 'เลือก' });
+          deductions.push([chosen, qty * merged[chosen]]);
+          pieces += merged[chosen];
+        });
+        if (!isNew) k.fixed.forEach(function (f) {
           const it = idx[f.id];
           if (!it) throw new Error('ไม่พบสินค้าที่ติดแพ็กเกจ ' + k.name);
           items.push({ item_id: f.id, item_name: it.name, qty: qty * f.qty, unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: 'ติดเซต' });
           deductions.push([f.id, qty * f.qty]);
           pieces += f.qty;
         });
-        Object.keys(merged).forEach(function (chosen) {
+        if (!isNew) Object.keys(merged).forEach(function (chosen) {
           if (k.pool.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
           const it = idx[chosen];
           if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
@@ -963,7 +982,7 @@ function savePackage_(p, user) {
     fixed.concat(pool.map(function (i) { return { id: i }; })).forEach(function (f) { if (!idx[f.id]) throw new Error('ไม่พบสินค้า ' + f.id); });
     const rows = readTable_('Packages');
     let id = str_(p.package_id);
-    const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false, total_qty: totalQty };
+    const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false, total_qty: totalQty, lock_fixed: p.lock_fixed === true };
     const nm = function (i) { return idx[i] ? idx[i].name : i; };
     const contents = function (fx, pl) { return 'ติดแพ็กเกจ: ' + (fx.map(function (f) { return nm(f.id) + '×' + f.qty; }).join(', ') || '-') + ' · ให้เลือก: ' + (pl.map(nm).join(', ') || '-'); };
     let logDetail;
@@ -1195,6 +1214,72 @@ function stockCount_(p, user) {
   });
 }
 
+/* ---------------- Bug reports ---------------- */
+
+/** ทุกคนส่งได้: { title, detail, images: [base64 jpeg ≤3], app_version, device } — ชื่อผู้ส่งใช้จากบัญชีที่ล็อกอิน */
+function submitBug_(p, user) {
+  const title = str_(p.title), detail = str_(p.detail);
+  if (!title) throw new Error('กรุณาใส่หัวข้อ');
+  if (!detail) throw new Error('กรุณาใส่รายละเอียด');
+  if (title.length > 200 || detail.length > 5000) throw new Error('ข้อความยาวเกินไป');
+  const imgs = (Array.isArray(p.images) ? p.images : []).slice(0, 3);
+  // บันทึกรูปก่อน (นอก lock) ถ้ารูปใหญ่เกินจะไม่บันทึกรายงาน
+  const ids = imgs.map(function (b64, i) {
+    const bytes = Utilities.base64Decode(str_(b64));
+    if (bytes.length > 4 * 1024 * 1024) throw new Error('รูปที่ ' + (i + 1) + ' ใหญ่เกิน 4MB');
+    return folder_(BUG_FOLDER).createFile(Utilities.newBlob(bytes, 'image/jpeg', 'bug-' + Date.now() + '-' + (i + 1) + '.jpg')).getId();
+  });
+  return withLock_(function () {
+    const rows = readTable_('BugReports');
+    const r = {
+      report_id: nextId_(rows, 'report_id', 'BR', 3), created_at: now_(), user_id: user.user_id, username: user.username,
+      display_name: user.display_name, title: title, detail: detail, images: ids.join(','),
+      app_version: str_(p.app_version).slice(0, 20), device: str_(p.device).slice(0, 200), status: 'ใหม่', resolution: '', updated_at: '', updated_by: ''
+    };
+    appendRow_('BugReports', r);
+    log_(user, 'แจ้งปัญหา', 'รายงานปัญหา', r.report_id, title, (ids.length ? 'แนบรูป ' + ids.length + ' รูป' : ''));
+    return { report_id: r.report_id };
+  });
+}
+
+function cleanBug_(r) {
+  return {
+    report_id: str_(r.report_id), created_at: str_(r.created_at), username: str_(r.username), display_name: str_(r.display_name),
+    title: str_(r.title), detail: str_(r.detail), images: str_(r.images).split(',').filter(String), app_version: str_(r.app_version),
+    device: str_(r.device), status: str_(r.status) || 'ใหม่', resolution: str_(r.resolution), updated_at: str_(r.updated_at), updated_by: str_(r.updated_by)
+  };
+}
+
+function listBugs_() {
+  return { reports: readTable_('BugReports').map(cleanBug_).reverse() };
+}
+
+/** มาสเตอร์ปรับสถานะ + บันทึกว่าแก้อะไร: { report_id, status, resolution } */
+function updateBug_(p, user) {
+  return withLock_(function () {
+    const r = readTable_('BugReports').filter(function (x) { return str_(x.report_id) === str_(p.report_id); })[0];
+    if (!r) throw new Error('ไม่พบรายงาน');
+    const patch = { updated_at: now_(), updated_by: user.display_name };
+    if (p.status !== undefined) {
+      if (BUG_STATUS.indexOf(str_(p.status)) < 0) throw new Error('สถานะไม่ถูกต้อง');
+      patch.status = str_(p.status);
+    }
+    if (p.resolution !== undefined) patch.resolution = str_(p.resolution).slice(0, 2000);
+    updateRow_('BugReports', r._row, patch);
+    log_(user, 'แก้ไข', 'รายงานปัญหา', r.report_id, r.title, [patch.status && patch.status !== r.status ? 'สถานะ: ' + patch.status : '', patch.resolution ? 'บันทึก: ' + patch.resolution : ''].filter(String).join(' · '));
+    return { report: cleanBug_(Object.assign({}, r, patch)) };
+  });
+}
+
+/** รูปแนบรายงาน (เฉพาะไฟล์ที่อยู่ในรายงานจริง) */
+function getBugImage_(p) {
+  const id = str_(p.id);
+  const ok = readTable_('BugReports').some(function (r) { return str_(r.images).split(',').indexOf(id) >= 0; });
+  if (!id || !ok) throw new Error('ไม่พบรูป');
+  const blob = DriveApp.getFileById(id).getBlob();
+  return { mime: blob.getContentType() || 'image/jpeg', data: Utilities.base64Encode(blob.getBytes()) };
+}
+
 function folder_(name) {
   const it = DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : DriveApp.createFolder(name);
@@ -1215,7 +1300,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v11');
+  CacheService.getScriptCache().remove('setup_ok_v13');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.18'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.19'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -118,6 +118,7 @@ function route_(req) {
   const p = req.payload || {};
   if (PUBLIC_ACTIONS[action]) return PUBLIC_ACTIONS[action](p);
   ensureMaster_();
+  migrateBillIds_();
   const user = auth_(req.token);
   if (USER_ACTIONS[action]) return USER_ACTIONS[action](p, user, req.token);
   if (ADMIN_ACTIONS[action]) {
@@ -676,7 +677,10 @@ function createSale_(p, user) {
     dAmount = Math.min(subtotal, Math.round(dAmount * 100) / 100);
     const total = Math.round((subtotal - dAmount) * 100) / 100;
 
-    const billId = nextId_(sales, 'bill_id', 'B', 4);
+
+    // เลขบิล EX + ปีเดือนวันที่ขาย + ลำดับ 4 หลัก (เริ่ม 0001 ใหม่ทุกวัน)
+    const soldAt = saleTime_(p);
+    const billId = newBillId_(sales, soldAt);
 
     // รูปสลิป (ถ้ามี) — บันทึกก่อนตัดสต็อก ถ้าบันทึกรูปไม่ได้จะไม่ขาย
     let slipUrl = '';
@@ -691,7 +695,7 @@ function createSale_(p, user) {
     const autoHidden = flushStock_(idx, user);
 
     const bill = {
-      bill_id: billId, datetime: saleTime_(p), event_name: str_(p.event_name), subtotal: subtotal,
+      bill_id: billId, datetime: soldAt, event_name: str_(p.event_name), subtotal: subtotal,
       discount_type: dType, discount_value: dValue, discount_amount: dAmount, total: total,
       payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId, slip_url: slipUrl
     };
@@ -706,6 +710,73 @@ function createSale_(p, user) {
 }
 
 /** เวลาขาย: บิลออฟไลน์ใช้เวลาที่ขายจริงในเครื่อง (ถ้าสมเหตุสมผล) ไม่งั้นใช้เวลาตอนบันทึก */
+/** เลขบิลแบบ EXYYYYMMDDXXXX — EX = ขายออกบูธ, วันที่ = วันที่ขาย, XXXX = ลำดับบิลของวันนั้น */
+const BILL_PREFIX = 'EX';
+function newBillId_(sales, datetime) {
+  const day = BILL_PREFIX + str_(datetime).slice(0, 10).replace(/-/g, '');
+  let max = 0;
+  sales.forEach(function (r) {
+    const id = str_(r.bill_id);
+    if (id.length === day.length + 4 && id.indexOf(day) === 0) max = Math.max(max, Number(id.slice(day.length)) || 0);
+  });
+  return day + pad_(max + 1, 4);
+}
+
+/**
+ * เปลี่ยนเลขบิลเก่า (B0001…) เป็นแบบใหม่ ครั้งเดียว: สำรองไฟล์ชีตก่อน แล้วเรียงตามเวลาขายในแต่ละวัน
+ * แก้ใน Sales, SaleItems, หมายเหตุ StockIn (คืนสต็อกจากยกเลิกบิล) และ Logs
+ */
+function migrateBillIds_() {
+  const props = PropertiesService.getScriptProperties();
+  const cache = CacheService.getScriptCache();
+  if (cache.get('billids_ok_v1') || props.getProperty('billids_ex_v1')) { cache.put('billids_ok_v1', '1', 21600); return; }
+  withLock_(function () {
+    if (props.getProperty('billids_ex_v1')) return;
+    const sales = readTable_('Sales');
+    const isNew = function (id) { return new RegExp('^' + BILL_PREFIX + '\\d{12}$').test(id); };
+    const old = sales.filter(function (r) { return str_(r.bill_id) && !isNew(str_(r.bill_id)); });
+    if (old.length) {
+      // สำรองไฟล์ทั้งชีตก่อนแก้
+      const file = DriveApp.getFileById(ss_().getId());
+      const backup = file.makeCopy(file.getName() + ' — สำรองก่อนเปลี่ยนเลขบิล ' + now_());
+      const num = function (id) { const m = String(id).match(/(\d+)$/); return m ? Number(m[1]) : 0; };
+      old.sort(function (a, b) { return str_(a.datetime) < str_(b.datetime) ? -1 : str_(a.datetime) > str_(b.datetime) ? 1 : num(a.bill_id) - num(b.bill_id); });
+      const map = {};
+      const taken = sales.filter(function (r) { return isNew(str_(r.bill_id)); });
+      old.forEach(function (r) {
+        const id = newBillId_(taken, str_(r.datetime));
+        map[str_(r.bill_id)] = id;
+        taken.push({ bill_id: id });
+      });
+      const col = function (name, field, fn) {
+        const sh = sh_(name), hs = headers_(name), c = hs.indexOf(field) + 1, n = sh.getLastRow() - 1;
+        if (c < 1 || n < 1) return;
+        const rg = sh.getRange(2, c, n, 1), vals = rg.getValues();
+        let changed = false;
+        vals.forEach(function (v) { const nv = fn(v[0]); if (nv !== v[0]) { v[0] = nv; changed = true; } });
+        if (changed) rg.setValues(vals);
+      };
+      const swap = function (v) { const k = str_(v); return map[k] !== undefined ? map[k] : v; };
+      col('Sales', 'bill_id', swap);
+      col('SaleItems', 'bill_id', swap);
+      col('StockIn', 'note', function (v) { return String(v).replace(/(ยกเลิกบิล )(\S+)/, function (m, a, id) { return map[id] ? a + map[id] : m; }); });
+      const lh = headers_('Logs'), tt = lh.indexOf('target_type'), ti = lh.indexOf('target_id');
+      const ls = sh_('Logs'), ln = ls.getLastRow() - 1;
+      if (tt >= 0 && ti >= 0 && ln > 0) {
+        const rg = ls.getRange(2, 1, ln, lh.length), vals = rg.getValues();
+        let changed = false;
+        vals.forEach(function (r) { if (r[tt] === 'บิล' && map[str_(r[ti])]) { r[ti] = map[str_(r[ti])]; changed = true; } });
+        if (changed) rg.setValues(vals);
+      }
+      log_({ display_name: 'ระบบ', username: 'system' }, 'แก้ไข', 'บิล', '', 'เปลี่ยนเลขบิล',
+        'เปลี่ยนเลขบิลเป็นแบบ ' + BILL_PREFIX + 'YYYYMMDDXXXX ' + old.length + ' บิล · สำรองไฟล์ไว้ที่ "' + backup.getName() + '" · ' +
+        Object.keys(map).slice(0, 300).map(function (k) { return k + '→' + map[k]; }).join(', ') + (old.length > 300 ? ' …' : ''));
+    }
+    props.setProperty('billids_ex_v1', now_());
+  });
+  cache.put('billids_ok_v1', '1', 21600);
+}
+
 function saleTime_(p) {
   const t = str_(p.sold_at);
   if (!p.offline || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)) return now_();
