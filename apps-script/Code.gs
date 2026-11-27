@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.19'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.20'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
