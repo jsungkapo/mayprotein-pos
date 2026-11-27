@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.17">
+<link rel="stylesheet" href="styles.css?v=1.18">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -197,11 +197,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.17"></script>
-<script src="config.js?v=1.17"></script>
-<script src="api.js?v=1.17"></script>
-<script src="requisition.js?v=1.17"></script>
-<script src="receipt.js?v=1.17"></script>
+<script src="version.js?v=1.18"></script>
+<script src="config.js?v=1.18"></script>
+<script src="api.js?v=1.18"></script>
+<script src="requisition.js?v=1.18"></script>
+<script src="receipt.js?v=1.18"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -234,6 +234,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   if (b.dataset.t === 'stock') { renderStockTab(); initReq(); loadReqs(); load().then(() => { renderStockTab(); if (rq.lines.every(l => !l.item_id && !l.custom)) renderReqLines(); }); }
   if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); }
   if (b.dataset.t === 'log') loadLogs();
+  if (b.dataset.t === 'set') loadBugs();
 });
 $('qProd').oninput = renderProducts;
 
@@ -859,19 +860,59 @@ function renderUsers() {
 
 /* ---------- settings ---------- */
 function versionHtml() {
-  const V = window.APP_VERSION || { version: '?', history: [], backups: [] };
+  const V = window.APP_VERSION || { version: '?' };
   const sv = D.server_version || '';
-  const warn = sv && sv !== V.version ? `<div class="hint" style="color:var(--warn)">หน้าเว็บ v${esc(V.version)} แต่เซิร์ฟเวอร์ v${esc(sv)} — กด 🔄 อัปเดตระบบ แล้วรอสักครู่</div>` : '';
-  const bk = (V.backups || []).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee">
-      <span><b>v${esc(v)}</b> <span class="hint">${esc(((V.history || []).find(h => h.version === v) || {}).notes || '')}</span></span>
-      <span style="white-space:nowrap"><a href="versions/v${esc(v)}/index.html" target="_blank">หน้าขาย</a> · <a href="versions/v${esc(v)}/admin.html" target="_blank">หลังบ้าน</a></span></div>`).join('') || '<div class="hint">ยังไม่มี</div>';
-  const hist = (V.history || []).slice(0, 15).map(h => `<tr><td style="white-space:nowrap"><b>v${esc(h.version)}</b><div class="hint" style="margin:0">${esc(String(h.date || '').slice(0, 10))}</div></td><td>${esc(h.notes)}</td></tr>`).join('');
-  return `<div class="sec" id="verSec"><h4>เวอร์ชัน <span class="tag ok">v${esc(V.version)}</span></h4>
-    <div class="hint">หน้าเว็บ v${esc(V.version)} · เซิร์ฟเวอร์ ${sv ? 'v' + esc(sv) : '-'} · แก้ล่าสุด ${esc(V.date || '')}</div>${warn}
-    <label>สำรองเวอร์ชันเก่า (เก็บ 3 เวอร์ชันล่าสุด)</label>${bk}
-    <div class="hint">เปิดเวอร์ชันเก่าได้ทันทีโดยใช้ข้อมูลชุดเดียวกัน ถ้าต้องการย้อนกลับทั้งระบบ บอก Claude ว่า “ย้อนกลับเป็นเวอร์ชัน x”</div>
-    <label>ประวัติการแก้ไข</label><table>${hist}</table></div>`;
+  const warn = sv && sv !== V.version ? `<div class="hint" style="color:var(--warn)">เซิร์ฟเวอร์ยังเป็น v${esc(sv)} — กด 🔄 อัปเดตระบบ</div>` : '';
+  return `<div class="sec" id="verSec"><h4>เวอร์ชัน <span class="tag ok">v${esc(V.version)}</span></h4>${warn}
+    <button class="btn line" onclick="POS.bugReport()">🐞 แจ้งปัญหา (Bug report)</button>
+    <h4 style="margin-top:16px"><span>รายงานปัญหาที่ได้รับ</span><a onclick="loadBugs()">↻ รีเฟรช</a></h4>
+    <select id="bugF" onchange="renderBugs()" style="margin-bottom:8px"><option value="open">ยังไม่เสร็จ (ใหม่ + กำลังแก้)</option><option value="">ทั้งหมด</option>${BUG_ST.map(x => `<option>${x}</option>`).join('')}</select>
+    <div id="bugList"><div class="empty">-</div></div></div>`;
 }
+
+/* ---------- รายงานปัญหา (มาสเตอร์) ---------- */
+const BUG_ST = ['ใหม่', 'กำลังแก้', 'แก้แล้ว', 'ไม่แก้'];
+const BUG_CLS = { 'ใหม่': 'bad', 'กำลังแก้': 'warn', 'แก้แล้ว': 'ok', 'ไม่แก้': '' };
+let BUGS = null;
+async function loadBugs() {
+  if (!isMaster() || !$('bugList')) return;
+  try { BUGS = (await POS.call('listBugs')).reports; renderBugs(); }
+  catch (e) { $('bugList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderBugs() {
+  if (!$('bugList') || !BUGS) return;
+  const f = $('bugF').value;
+  const rows = BUGS.filter(b => !f || (f === 'open' ? ['ใหม่', 'กำลังแก้'].includes(b.status) : b.status === f));
+  $('bugList').innerHTML = rows.map(b => `<details class="bug" data-id="${esc(b.report_id)}" style="background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:10px;margin-bottom:8px">
+    <summary style="cursor:pointer;list-style:none"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(b.title)}</b><span class="tag ${BUG_CLS[b.status] || ''}" style="flex:none">${esc(b.status)}</span></div>
+      <small style="color:#888">${esc(b.report_id)} · ${esc(b.display_name)} · ${esc(b.created_at.slice(0, 16))}${b.images.length ? ` · 📷 ${b.images.length}` : ''}</small></summary>
+    <div style="white-space:pre-wrap;word-break:break-word;margin:8px 0;font-size:14px">${esc(b.detail)}</div>
+    <div class="bugimgs" style="display:flex;gap:8px;flex-wrap:wrap">${b.images.map(id => `<img data-img="${esc(id)}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;background:#eee;cursor:pointer">`).join('')}</div>
+    <div class="hint">@${esc(b.username)} · v${esc(b.app_version || '?')}</div>
+    <div class="row" style="margin-top:8px"><div><label>สถานะ</label><select data-st>${BUG_ST.map(x => `<option ${x === b.status ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>
+    <label>บันทึกการแก้ไข</label><textarea data-res rows="2" placeholder="เช่น แก้แล้วใน v1.18">${esc(b.resolution)}</textarea>
+    ${b.updated_by ? `<div class="hint">อัปเดตล่าสุด ${esc(b.updated_at.slice(0, 16))} โดย ${esc(b.updated_by)}</div>` : ''}
+    <button class="btn sm" data-save style="margin-top:6px">บันทึก</button></details>`).join('') || '<div class="empty">ไม่มีรายงาน</div>';
+  $('bugList').querySelectorAll('details.bug').forEach(d => {
+    const b = BUGS.find(x => x.report_id === d.dataset.id);
+    d.addEventListener('toggle', () => { if (d.open) d.querySelectorAll('img[data-img]:not([src])').forEach(loadBugImg); });
+    d.querySelectorAll('img[data-img]').forEach(img => img.onclick = () => img.src && window.open(img.src.startsWith('data:') ? URL.createObjectURL(dataBlob(img.src)) : img.src));
+    d.querySelector('[data-save]').onclick = async e => {
+      const btn = e.target; busy(btn, true);
+      try {
+        const r = await POS.call('updateBug', { report_id: b.report_id, status: d.querySelector('[data-st]').value, resolution: d.querySelector('[data-res]').value.trim() });
+        Object.assign(b, r.report); POS.toast('บันทึกแล้ว'); renderBugs();
+      } catch (err) { POS.toast(err.message, true); busy(btn, false); }
+    };
+  });
+}
+const bugImgCache = {};
+async function loadBugImg(img) {
+  const id = img.dataset.img;
+  try { if (!bugImgCache[id]) { const r = await POS.call('getBugImage', { id }); bugImgCache[id] = 'data:' + r.mime + ';base64,' + r.data; } img.src = bugImgCache[id]; }
+  catch (e) { img.alt = 'โหลดรูปไม่ได้'; }
+}
+function dataBlob(u) { const [h, b] = u.split(','); const bin = atob(b); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: h.slice(5).split(';')[0] }); }
 const RC_KEYS = ['receipt_name', 'receipt_address', 'receipt_phone', 'receipt_tax_id', 'receipt_logo', 'receipt_footer', 'receipt_qr', 'receipt_qr_label'];
 function renderSettings() {
   const s = { ...D.settings };
@@ -903,6 +944,7 @@ function renderSettings() {
       <div class="sec"><h4>อัปเดตระบบ</h4><div class="hint" style="margin-bottom:8px">ปกติระบบอัปเดตเองภายใน 5–10 นาทีหลังมีการแก้ไข กดปุ่มนี้ถ้าอยากได้เวอร์ชันล่าสุดทันที (หรือกด 🔄 มุมขวาบน)</div>
       <button class="btn line" onclick="POS.updateSystem(this)">🔄 อัปเดตระบบเป็นเวอร์ชันล่าสุด</button></div>
       ${versionHtml()}`;
+    renderBugs();
     bindImg($('qrSec'), () => s.promptpay_qr_image_url, (u, re) => { if (re === false) { s.promptpay_qr_image_url = u; return; } keep(); s.promptpay_qr_image_url = u; render(); }, 'qr');
     $('s_receipt_logo').value = s.receipt_logo || 'on';
     $('s_receipt_qr').value = s.receipt_qr || 'none';
