@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.11">
+<link rel="stylesheet" href="styles.css?v=1.14">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -96,18 +96,30 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 .lrow .d{margin-top:4px;color:#444;line-height:1.45;word-break:break-word}
 .act{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eee;margin-right:4px}
 .act.add{background:#e1f5ea;color:var(--ok)}.act.del{background:#fde4e4;color:var(--bad)}.act.edit{background:#e7efff;color:#2f5bd3}.act.sale{background:var(--pink-soft);color:var(--pink)}.act.stock{background:#fff3d6;color:var(--warn)}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.11 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+/* เลือกหลายรายการ (เปิด/ปิดขาย) */
+.list .it .ck{width:22px;height:22px;border-radius:6px;border:2px solid #b5c4d0;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;background:#fff}
+.list .it.sel{outline:2px solid var(--pink);outline-offset:-2px}
+.list .it.sel .ck{background:var(--pink);border-color:var(--pink)}
+.list .it.sel.off{opacity:.8}
+#bulkBar{position:sticky;bottom:0;z-index:6;background:#fff;border-radius:14px;box-shadow:0 -2px 12px #0002;padding:10px;margin-top:8px;display:none}
+#bulkBar.on{display:block}
+#bulkBar .row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px}
+#bulkBar .row2{display:flex;gap:8px}
+#bulkBar .row2 .btn{flex:1}
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.14 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
 </header>
 <div class="tabs" id="tabs">
-  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="stock">สต็อก</button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set">ตั้งค่า</button>
+  <button class="on" data-t="prod">สินค้า</button><button data-t="pkg">แพ็กเกจ</button><button data-t="users">พนักงาน <span id="pendCnt"></span></button><button data-t="stock">สต็อก</button><button data-t="count">นับสต็อก</button><button data-t="log">ประวัติ</button><button data-t="set" id="tabSet" style="display:none">ตั้งค่า</button>
 </div>
 <div class="wrap">
   <div class="page on" id="p-prod">
-    <div class="toolbar"><input id="qProd" placeholder="🔍 ค้นหาชื่อ / SKU"><button class="btn sm" onclick="editProduct()">+ เพิ่มสินค้า</button></div>
+    <div class="toolbar"><input id="qProd" placeholder="🔍 ค้นหาชื่อ / SKU"><button class="btn sm line" id="bulkToggle" onclick="bulkMode(!bulk.on)">☑ เลือก</button><button class="btn sm" onclick="editProduct()">+ เพิ่มสินค้า</button></div>
     <div class="list" id="prodList"><div class="loading"><span class="spin dark"></span>กำลังโหลด</div></div>
+    <div id="bulkBar"><div class="row1"><b id="bulkCnt">เลือก 0 รายการ</b><span><a onclick="bulkAll()" id="bulkAllBtn">เลือกทั้งหมด</a> · <a onclick="bulkMode(false)">ยกเลิก</a></span></div>
+      <div class="row2"><button class="btn" id="bulkOn" onclick="bulkSet(true)">✅ เปิดขาย</button><button class="btn danger" id="bulkOff" onclick="bulkSet(false)">⛔ ปิดขาย</button></div></div>
   </div>
   <div class="page" id="p-pkg">
     <div class="toolbar"><div style="flex:1;color:var(--muted);font-size:13px;align-self:center">เซตโปรโมชันที่ลูกค้าเลือกสินค้าในแต่ละช่องได้</div><button class="btn sm" onclick="editPackage()">+ เพิ่มแพ็กเกจ</button></div>
@@ -131,8 +143,8 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>ใบเบิกที่ผ่านมา</b><a onclick="loadReqs()">↻ รีเฟรช</a></div>
       <div id="rqList"><div class="empty">-</div></div>
     </div>
-    <details class="box">
-      <summary style="font-weight:700;cursor:pointer">ปรับสต็อกรายการเดียว (เพิ่ม / ลด ไม่ออกใบเบิก)</summary>
+    <details class="box" id="stAdjBox" style="display:none">
+      <summary style="font-weight:700;cursor:pointer">🔒 ปรับสต็อกรายการเดียว (เพิ่ม / ลด ไม่ออกใบเบิก)</summary>
       <label>ชื่องาน / สถานที่</label><input id="stEv" placeholder="เช่น Bangkok Fit Expo">
       <label>สินค้า</label><select id="stItem"></select>
       <label>ปรับสต็อก</label>
@@ -185,11 +197,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.11"></script>
-<script src="config.js?v=1.11"></script>
-<script src="api.js?v=1.11"></script>
-<script src="requisition.js?v=1.11"></script>
-<script src="receipt.js?v=1.11"></script>
+<script src="version.js?v=1.14"></script>
+<script src="config.js?v=1.14"></script>
+<script src="api.js?v=1.14"></script>
+<script src="requisition.js?v=1.14"></script>
+<script src="receipt.js?v=1.14"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -205,7 +217,15 @@ function opts(arr, cur) { const a = arr.includes(cur) || !cur ? arr : [cur, ...a
 
 // เริ่มหลังสคริปต์ทั้งไฟล์โหลดเสร็จ (ตัวแปรที่ประกาศด้านล่างจะพร้อมใช้)
 window.addEventListener('DOMContentLoaded', () => POS.logoFromCache && POS.logoFromCache());
-window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; load(); }, { adminOnly: true }));
+window.addEventListener('DOMContentLoaded', () => POS.requireLogin(u => { me = u; $('whoName').textContent = u.display_name; applyRole(); load(); }, { adminOnly: true }));
+
+/** มาสเตอร์เท่านั้น: แท็บตั้งค่า + ปรับสต็อกรายการเดียว (แอดมินมองไม่เห็น) */
+const isMaster = () => !!me && me.role === 'master';
+function applyRole() {
+  $('tabSet').style.display = isMaster() ? '' : 'none';
+  $('stAdjBox').style.display = isMaster() ? '' : 'none';
+  if (!isMaster() && $('p-set').classList.contains('on')) document.querySelector('#tabs button[data-t=prod]').click();
+}
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
@@ -308,10 +328,48 @@ function renderProducts() {
   $('prodList').innerHTML = rows.map(p => {
     const vs = varsOf(p.product_id);
     const st = p.has_variants ? vs.reduce((a, v) => a + v.stock_qty, 0) : p.stock_qty;
-    return `<div class="it ${p.active ? '' : 'off'}" onclick="editProduct('${p.product_id}')"><div class="thumb">${p.image_url ? `<img src="${esc(p.image_url)}" loading="lazy" onerror="POS.imgFix(this)">` : '📦'}</div>
+    const sel = bulk.on && bulk.ids.has(p.product_id);
+    return `<div class="it ${p.active ? '' : 'off'} ${sel ? 'sel' : ''}" onclick="${bulk.on ? `bulkPick('${p.product_id}')` : `editProduct('${p.product_id}')`}">${bulk.on ? `<div class="ck">${sel ? '✓' : ''}</div>` : ''}<div class="thumb">${p.image_url ? `<img src="${esc(p.image_url)}" loading="lazy" onerror="POS.imgFix(this)">` : '📦'}</div>
       <div class="t"><b>${esc(p.name)}${p.active ? '' : `<span class="tag ${st <= 0 ? 'bad' : ''}">${st <= 0 ? 'หมด · ปิดขาย' : 'ปิดขาย'}</span>`}</b><small>${esc(p.sku || '-')} · ${esc([p.category, p.subcategory].filter(Boolean).join(' › '))}${p.has_variants ? ` · ${vs.length} ตัวเลือก` : ''}</small></div>
       <div class="r"><b>${money(p.price)}฿</b><br><small style="color:${st <= 0 ? 'var(--bad)' : 'var(--muted)'}">สต็อก ${st}</small></div></div>`;
   }).join('') || '<div class="empty">ยังไม่มีสินค้า</div>';
+  bulk.shown = rows.map(p => p.product_id);
+  bulkBar();
+}
+
+/* ---------- เลือกหลายรายการ → เปิด/ปิดขาย ---------- */
+const bulk = { on: false, ids: new Set(), shown: [] };
+function bulkMode(on) {
+  bulk.on = on; bulk.ids.clear();
+  $('bulkToggle').textContent = on ? '✕ เลิกเลือก' : '☑ เลือก';
+  renderProducts();
+}
+function bulkPick(id) { bulk.ids.has(id) ? bulk.ids.delete(id) : bulk.ids.add(id); renderProducts(); }
+function bulkAll() {
+  const all = bulk.shown.length && bulk.shown.every(id => bulk.ids.has(id));
+  bulk.shown.forEach(id => all ? bulk.ids.delete(id) : bulk.ids.add(id));
+  renderProducts();
+}
+function bulkBar() {
+  $('bulkBar').classList.toggle('on', bulk.on);
+  if (!bulk.on) return;
+  const n = bulk.ids.size;
+  $('bulkCnt').textContent = n ? `เลือก ${n} รายการ` : 'แตะสินค้าเพื่อเลือก';
+  $('bulkAllBtn').textContent = bulk.shown.length && bulk.shown.every(id => bulk.ids.has(id)) ? 'ไม่เลือกทั้งหมด' : 'เลือกทั้งหมด';
+  $('bulkOn').disabled = $('bulkOff').disabled = !n;
+}
+async function bulkSet(active) {
+  const ids = [...bulk.ids];
+  if (!ids.length) return;
+  const b = $(active ? 'bulkOn' : 'bulkOff'); busy(b, true);
+  try {
+    const r = await POS.call('setProductsActive', { ids, active });
+    ids.forEach(id => { const p = P(id); if (p) p.active = active; });
+    try { localStorage.setItem(ADMIN_CACHE, JSON.stringify(D)); } catch (e) {}
+    busy(b, false);
+    POS.toast(`${active ? 'เปิดขาย' : 'ปิดขาย'}แล้ว ${r.changed} รายการ` + (r.changed < ids.length ? ` (อีก ${ids.length - r.changed} รายการเป็นแบบนั้นอยู่แล้ว)` : ''));
+    bulkMode(false);
+  } catch (e) { busy(b, false); POS.toast(e.message, true); }
 }
 
 function uniqueSku(base) {
@@ -734,7 +792,7 @@ async function openDoc(req) {
   const canShare = navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'])], 'x.pdf', { type: 'application/pdf' })] });
   $('docShare').style.display = canShare ? '' : 'none';
   $('docShare').onclick = async () => {
-    try { await navigator.share({ files: [new File([await getPdf()], name, { type: 'application/pdf' })], title: name }); } catch (e) {}
+    try { await navigator.share({ files: [new File([await getPdf()], name, { type: 'application/pdf' })] }); } catch (e) {}
   };
 }
 
@@ -781,9 +839,11 @@ function renderUsers() {
   $('pendCnt').innerHTML = pend ? `<span class="tag warn">${pend}</span>` : '';
   $('userList').innerHTML = us.map(u => {
     const self = u.user_id === me.user_id;
+    const locked = u.role === 'master' && !isMaster(); // แอดมินแก้บัญชีมาสเตอร์ไม่ได้
+    if (locked) return `<div class="urow"><div class="top"><div><b>${esc(u.display_name)}</b> <span class="tag">มาสเตอร์</span><br><small style="color:#888">@${esc(u.username)}</small></div><span class="tag ${ST[u.status][0]}">${ST[u.status][1]}</span></div></div>`;
     return `<div class="urow"><div class="top"><div><b>${esc(u.display_name)}</b>${self ? ' <span class="tag">คุณ</span>' : ''}<br><small style="color:#888">@${esc(u.username)}</small></div><span class="tag ${ST[u.status][0]}">${ST[u.status][1]}</span></div>
       <div class="acts">
-        <select data-role="${u.user_id}" ${self ? 'disabled' : ''}><option value="seller" ${u.role === 'seller' ? 'selected' : ''}>พนักงานขาย</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>แอดมิน</option></select>
+        <select data-role="${u.user_id}" ${self ? 'disabled' : ''}><option value="seller" ${u.role === 'seller' ? 'selected' : ''}>พนักงานขาย</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>แอดมิน</option>${isMaster() ? `<option value="master" ${u.role === 'master' ? 'selected' : ''}>มาสเตอร์</option>` : ''}</select>
         ${u.status === 'pending' ? `<button class="btn sm" data-st="${u.user_id}" data-v="active">อนุมัติ</button><button class="btn sm danger" data-st="${u.user_id}" data-v="disabled">ไม่อนุมัติ</button>` : ''}
         ${u.status === 'active' && !self ? `<button class="btn sm danger" data-st="${u.user_id}" data-v="disabled">ปิดบัญชี</button>` : ''}
         ${u.status === 'disabled' ? `<button class="btn sm line" data-st="${u.user_id}" data-v="active">เปิดบัญชี</button>` : ''}
@@ -791,7 +851,7 @@ function renderUsers() {
       </div></div>`;
   }).join('') || '<div class="empty">ยังไม่มีพนักงาน</div>';
   const upd = async (payload, okMsg) => { try { await POS.call('updateUser', payload); POS.toast(okMsg); load(); } catch (e) { POS.toast(e.message, true); renderUsers(); } };
-  $('userList').querySelectorAll('[data-role]').forEach(s => s.onchange = () => upd({ user_id: s.dataset.role, role: s.value }, 'เปลี่ยนสิทธิ์แล้ว'));
+  $('userList').querySelectorAll('[data-role]').forEach(s => s.onchange = () => { if (s.value === 'master' && !confirm('ตั้งเป็นมาสเตอร์? จะเข้าถึงตั้งค่าและปรับสต็อกได้ทั้งหมด')) return renderUsers(); upd({ user_id: s.dataset.role, role: s.value }, 'เปลี่ยนสิทธิ์แล้ว'); });
   $('userList').querySelectorAll('[data-st]').forEach(b => b.onclick = () => { if (b.dataset.v === 'disabled' && !confirm('ปิดบัญชีนี้? (จะถูกออกจากระบบทันที)')) return; busy(b, true); upd({ user_id: b.dataset.st, status: b.dataset.v }, 'อัปเดตแล้ว'); });
   $('userList').querySelectorAll('[data-pin]').forEach(b => b.onclick = () => { const pin = prompt('ตั้ง PIN ใหม่ (ตัวเลข 4–6 หลัก)'); if (pin) upd({ user_id: b.dataset.pin, pin: pin.trim() }, 'ตั้ง PIN ใหม่แล้ว'); });
 }

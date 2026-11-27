@@ -11,7 +11,7 @@
 <link rel="icon" href="icons/icon-192.png?v=2">
 <title>MayProtein POS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.14">
+<link rel="stylesheet" href="styles.css?v=1.15">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
@@ -46,8 +46,8 @@ main{flex:1;overflow-y:auto;min-height:0}
 .pay button{flex:1;padding:12px 4px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px}
 .pay button.on{border-color:var(--pink);background:var(--pink-soft);font-weight:700}
 .tot{display:flex;justify-content:space-between;font-size:20px;font-weight:700;margin:14px 0}
-.tot.big{align-items:center}
-.tot.big #sub{font-size:60px;line-height:1.1}
+.tot.net{align-items:center;font-size:30px;line-height:1.1;flex-wrap:wrap;column-gap:10px}
+.tot.net #net{margin-left:auto}
 .slip{display:flex;align-items:center;gap:10px;background:#f6f7f9;border-radius:10px;padding:10px;margin-top:10px}
 .slip img{width:64px;height:84px;object-fit:cover;border-radius:6px;flex:none;background:#ddd}
 .slip .t{flex:1;font-size:13px;color:#555}
@@ -184,7 +184,7 @@ tr.low td{color:var(--bad)}
 <div class="modal" id="mOk"><div class="sheet ok" id="okSheet"></div></div>
 <div class="modal" id="mPay"><div class="sheet">
   <h3>ชำระเงิน</h3>
-  <div class="tot big"><span>รวม</span><span id="sub">0</span></div>
+  <div class="tot"><span>รวม</span><span id="sub">0</span></div>
   <label>ส่วนลดท้ายบิล</label>
   <div class="row"><input type="number" inputmode="decimal" id="disc" value="0" oninput="calc()"><select id="dtype" onchange="calc()" style="flex:none;width:90px"><option value="baht">บาท</option><option value="percent">%</option></select></div>
   <label>หมายเหตุ</label><textarea id="note" rows="2" placeholder="พิมพ์เพิ่มเติม..."></textarea>
@@ -193,7 +193,7 @@ tr.low td{color:var(--bad)}
   <div id="qrBox" style="display:none;text-align:center"></div>
   <div id="slipBox" style="display:none"></div>
   <input type="file" id="slipIn" accept="image/*" capture="environment" style="display:none">
-  <div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
+  <div class="tot net"><span>ยอดสุทธิ</span><span id="net">0</span></div>
   <button class="btn" id="payBtn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
   <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
 </div></div>
@@ -232,13 +232,13 @@ tr.low td{color:var(--bad)}
 </div></div>
 <div id="printArea"></div>
 
-<script src="version.js?v=1.14"></script>
-<script src="config.js?v=1.14"></script>
-<script src="api.js?v=1.14"></script>
-<script src="requisition.js?v=1.14"></script>
-<script src="report.js?v=1.14"></script>
-<script src="receipt.js?v=1.14"></script>
-<script src="offline.js?v=1.14"></script>
+<script src="version.js?v=1.15"></script>
+<script src="config.js?v=1.15"></script>
+<script src="api.js?v=1.15"></script>
+<script src="requisition.js?v=1.15"></script>
+<script src="report.js?v=1.15"></script>
+<script src="receipt.js?v=1.15"></script>
+<script src="offline.js?v=1.15"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
