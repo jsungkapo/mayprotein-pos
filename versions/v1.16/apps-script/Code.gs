@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.13'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.16'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -610,22 +610,34 @@ function createSale_(p, user) {
         setNo += 1;
         items.push({ item_id: k.package_id, item_name: k.name, qty: qty, unit_price: k.price, line_total: k.price * qty, package_id: k.package_id, package_set_no: setNo, slot: '' });
         subtotal += k.price * qty;
-        // สินค้าติดแพ็กเกจ (ใส่ให้อัตโนมัติ) + สินค้าที่เลือกเองจาก pool ต้องรวมครบจำนวนชิ้นทั้งหมดพอดี
+        // แบบใหม่ selections.items = ทุกชิ้นในเซต (สินค้าติดแพ็กเกจเป็นแค่ค่าเริ่มต้น หน้าร้านแก้ได้)
+        //   เลือกได้จาก สินค้าติดแพ็กเกจ + pool · รวมต้องครบจำนวนชิ้นทั้งหมดพอดี
+        // แบบเก่า selections.pool (บิลออฟไลน์ที่ค้างจากเวอร์ชันก่อน) = สินค้าติดแพ็กเกจใส่ให้อัตโนมัติ + ที่เลือกจาก pool
         const merged = {};
-        const picks = Array.isArray(ln.selections && ln.selections.pool) ? ln.selections.pool : [];
+        const isNew = Array.isArray(ln.selections && ln.selections.items);
+        const picks = isNew ? ln.selections.items : Array.isArray(ln.selections && ln.selections.pool) ? ln.selections.pool : [];
         picks.forEach(function (x) {
           const pid = str_(x && x.id), q = Math.round(num_(x && x.qty));
           if (pid && q > 0) merged[pid] = (merged[pid] || 0) + q;
         });
+        const fixedIds = k.fixed.map(function (f) { return f.id; });
         let pieces = 0;
-        k.fixed.forEach(function (f) {
+        if (isNew) Object.keys(merged).forEach(function (chosen) {
+          if (k.pool.indexOf(chosen) < 0 && fixedIds.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
+          const it = idx[chosen];
+          if (!it) throw new Error('ไม่พบสินค้า ' + chosen);
+          items.push({ item_id: chosen, item_name: it.name, qty: qty * merged[chosen], unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: fixedIds.indexOf(chosen) >= 0 ? 'ติดเซต' : 'เลือก' });
+          deductions.push([chosen, qty * merged[chosen]]);
+          pieces += merged[chosen];
+        });
+        if (!isNew) k.fixed.forEach(function (f) {
           const it = idx[f.id];
           if (!it) throw new Error('ไม่พบสินค้าที่ติดแพ็กเกจ ' + k.name);
           items.push({ item_id: f.id, item_name: it.name, qty: qty * f.qty, unit_price: 0, line_total: 0, package_id: k.package_id, package_set_no: setNo, slot: 'ติดเซต' });
           deductions.push([f.id, qty * f.qty]);
           pieces += f.qty;
         });
-        Object.keys(merged).forEach(function (chosen) {
+        if (!isNew) Object.keys(merged).forEach(function (chosen) {
           if (k.pool.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
           const it = idx[chosen];
           if (!it) throw new Error('ไม่พบสินค้า ' + chosen);

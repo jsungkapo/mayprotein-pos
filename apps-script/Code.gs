@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.16'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.17'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -16,7 +16,7 @@ const SLIP_FOLDER = 'MayProtein POS Slips'; // รูปสลิปเก็บ
 const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
-  Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty'],
+  Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty', 'lock_fixed'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
   Sales: ['bill_id', 'datetime', 'event_name', 'subtotal', 'discount_type', 'discount_value', 'discount_amount', 'total', 'payment_method', 'note', 'staff', 'client_id', 'slip_url', 'status', 'cancelled_at', 'cancelled_by', 'cancel_reason'],
@@ -148,7 +148,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v11')) return;
+  if (cache.get('setup_ok_v12')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -172,13 +172,13 @@ function ensureSetup_() {
   st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
   // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
   withLock_(function () {
-    if (cache.get('setup_ok_v11')) return;
+    if (cache.get('setup_ok_v12')) return;
     const have = {};
     readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
     Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
       if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
     });
-    cache.put('setup_ok_v11', '1', 21600);
+    cache.put('setup_ok_v12', '1', 21600);
   });
 }
 
@@ -254,7 +254,7 @@ function settingsMap_() {
 
 const LABELS = {
   name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
-  description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
+  description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', lock_fixed: 'ล็อกสินค้าติดแพ็กเกจ', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
   categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก',
   receipt_name: 'ชื่อบนใบเสร็จ', receipt_address: 'ที่อยู่', receipt_phone: 'เบอร์โทร', receipt_tax_id: 'เลขประจำตัวผู้เสียภาษี',
   receipt_footer: 'ข้อความท้ายใบเสร็จ', receipt_logo: 'โลโก้บนใบเสร็จ', receipt_qr: 'QR ท้ายใบเสร็จ', receipt_qr_url: 'รูป QR ท้ายใบเสร็จ', receipt_qr_label: 'คำอธิบาย QR'
@@ -416,7 +416,7 @@ function loadPackagesRaw_() {
   return readTable_('Packages').map(function (r) {
     return {
       package_id: str_(r.package_id), name: str_(r.name), price: num_(r.price), description: str_(r.description),
-      image_url: str_(r.image_url), active: bool_(r.active), total_qty: Math.max(0, num_(r.total_qty)),
+      image_url: str_(r.image_url), active: bool_(r.active), total_qty: Math.max(0, num_(r.total_qty)), lock_fixed: bool_(r.lock_fixed),
       slots: slots.filter(function (s) { return str_(s.package_id) === str_(r.package_id); }).map(function (s) {
         return {
           slot: str_(s.slot), kind: str_(s.kind), qty: s.qty === '' ? 0 : Math.max(0, num_(s.qty)), lines: Math.max(1, num_(s.lines) || 1),
@@ -622,6 +622,10 @@ function createSale_(p, user) {
         });
         const fixedIds = k.fixed.map(function (f) { return f.id; });
         let pieces = 0;
+        // ล็อกไว้ (ตั้งที่หลังบ้าน): ต้องมีสินค้าติดแพ็กเกจครบตามที่ตั้ง ห้ามเปลี่ยน/ลบ
+        if (isNew && k.lock_fixed) k.fixed.forEach(function (f) {
+          if ((merged[f.id] || 0) < f.qty) throw new Error(k.name + ': สินค้าติดแพ็กเกจถูกล็อกไว้ ต้องมี ' + ((idx[f.id] || {}).name || f.id) + ' ×' + f.qty);
+        });
         if (isNew) Object.keys(merged).forEach(function (chosen) {
           if (k.pool.indexOf(chosen) < 0 && fixedIds.indexOf(chosen) < 0) throw new Error('สินค้าที่เลือกไม่อยู่ในแพ็กเกจ ' + k.name);
           const it = idx[chosen];
@@ -975,7 +979,7 @@ function savePackage_(p, user) {
     fixed.concat(pool.map(function (i) { return { id: i }; })).forEach(function (f) { if (!idx[f.id]) throw new Error('ไม่พบสินค้า ' + f.id); });
     const rows = readTable_('Packages');
     let id = str_(p.package_id);
-    const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false, total_qty: totalQty };
+    const obj = { name: name, price: num_(p.price), description: str_(p.description), image_url: str_(p.image_url), active: p.active !== false, total_qty: totalQty, lock_fixed: p.lock_fixed === true };
     const nm = function (i) { return idx[i] ? idx[i].name : i; };
     const contents = function (fx, pl) { return 'ติดแพ็กเกจ: ' + (fx.map(function (f) { return nm(f.id) + '×' + f.qty; }).join(', ') || '-') + ' · ให้เลือก: ' + (pl.map(nm).join(', ') || '-'); };
     let logDetail;
@@ -1227,7 +1231,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v11');
+  CacheService.getScriptCache().remove('setup_ok_v12');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

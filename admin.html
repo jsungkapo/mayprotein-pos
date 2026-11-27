@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.16">
+<link rel="stylesheet" href="styles.css?v=1.17">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -197,11 +197,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.16"></script>
-<script src="config.js?v=1.16"></script>
-<script src="api.js?v=1.16"></script>
-<script src="requisition.js?v=1.16"></script>
-<script src="receipt.js?v=1.16"></script>
+<script src="version.js?v=1.17"></script>
+<script src="config.js?v=1.17"></script>
+<script src="api.js?v=1.17"></script>
+<script src="requisition.js?v=1.17"></script>
+<script src="receipt.js?v=1.17"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -504,14 +504,14 @@ function pkgDef(k) {
 /** copy = { from: package_id, data: ค่าที่คัดลอกมา } */
 function editPackage(id, copy) {
   const src = id ? D.packages.find(k => k.package_id === id) : copy ? copy.data : null;
-  const base = src ? JSON.parse(JSON.stringify(src)) : { name: '', price: '', description: '', image_url: '', active: true };
+  const base = src ? JSON.parse(JSON.stringify(src)) : { name: '', price: '', description: '', image_url: '', active: true, lock_fixed: false };
   const def = src ? pkgDef(base) : { fixed: [], pool: [], total: '' };
   const k = { ...base, total: def.total || '', fixed: def.fixed, pool: def.pool };
   const all = sellables();
   const el = $('editSheet');
   let filter = '';
   const keep = () => {
-    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked; k.total = $('kTotal').value;
+    k.name = $('kName').value; k.price = $('kPrice').value; k.description = $('kDesc').value; k.active = $('kAct').checked; k.total = $('kTotal').value; k.lock_fixed = $('kLock').checked;
     el.querySelectorAll('.fxrow').forEach((row, i) => { k.fixed[i].id = row.querySelector('select').value; k.fixed[i].qty = Math.max(0, Math.round(+row.querySelector('input').value || 0)); });
   };
   const fixedQty = () => k.fixed.reduce((a, f) => a + (f.id ? +f.qty || 0 : 0), 0);
@@ -532,9 +532,10 @@ function editPackage(id, copy) {
       <div class="pkgsum" id="kSum">${summary()}</div>
 
       <div class="sec"><h4><span>1. สินค้าติดแพ็กเกจ (ค่าเริ่มต้น)</span></h4>
-      <div class="hint" style="margin-bottom:8px">สินค้าเริ่มต้นของแพ็กเกจ หน้าขายจะใส่ให้อัตโนมัติ แต่พนักงานเปลี่ยนเป็นสินค้าอื่นในแพ็กเกจ หรือลบออกได้ เช่น โปรตีนรสพีช 1 ซอง (ไม่มีก็ได้)</div>
+      <div class="hint" style="margin-bottom:8px">หน้าขายจะใส่ให้อัตโนมัติ เช่น โปรตีนรสพีช 1 ซอง (ไม่มีก็ได้) · ถ้าไม่ติ๊กล็อก พนักงานเปลี่ยนเป็นสินค้าอื่นในแพ็กเกจหรือลบออกได้</div>
       ${k.fixed.map((f, i) => `<div class="fxrow"><select><option value="">— เลือกสินค้า —</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === f.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select><input type="number" inputmode="numeric" value="${f.qty}" placeholder="จำนวน"><button class="x" data-fx="${i}">✕</button></div>`).join('')}
-      <button class="btn sm line" id="fxAdd">+ เพิ่มสินค้าติดแพ็กเกจ</button></div>
+      <button class="btn sm line" id="fxAdd">+ เพิ่มสินค้าติดแพ็กเกจ</button>
+      <label class="chk" style="margin-top:10px"><input type="checkbox" id="kLock" ${k.lock_fixed ? 'checked' : ''}> 🔒 ล็อกสินค้าติดแพ็กเกจ (หน้าขายเปลี่ยน/ลบไม่ได้)</label></div>
 
       <div class="sec"><h4><span>2. สินค้าที่ให้ลูกค้าเลือกเอง</span></h4>
       <div class="hint" style="margin-bottom:8px">ติ๊กสินค้าที่ลูกค้าเลือกได้ (เช่น โปรตีน 40 กรัมทุกรส) หน้าขายจะเลือกได้จากสินค้าที่ติ๊กไว้นี้ และสินค้าติดแพ็กเกจในข้อ 1</div>
@@ -572,7 +573,7 @@ function editPackage(id, copy) {
       await waitUploads(b);
       if (isTemp(k.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
       try {
-        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, total_qty: t, fixed: k.fixed.filter(f => f.id && f.qty > 0), pool: k.pool });
+        await POS.call('savePackage', { package_id: id || '', name: k.name.trim(), price: +k.price || 0, description: k.description.trim(), image_url: k.image_url, active: k.active, lock_fixed: !!k.lock_fixed, total_qty: t, fixed: k.fixed.filter(f => f.id && f.qty > 0), pool: k.pool });
         POS.toast('บันทึกแล้ว'); closeM('mEdit'); load();
       } catch (e) { POS.toast(e.message, true); busy(b, false); }
     };

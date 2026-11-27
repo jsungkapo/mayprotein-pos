@@ -11,7 +11,7 @@
 <link rel="icon" href="icons/icon-192.png?v=2">
 <title>MayProtein POS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.13">
+<link rel="stylesheet" href="styles.css?v=1.16">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
@@ -46,6 +46,8 @@ main{flex:1;overflow-y:auto;min-height:0}
 .pay button{flex:1;padding:12px 4px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px}
 .pay button.on{border-color:var(--pink);background:var(--pink-soft);font-weight:700}
 .tot{display:flex;justify-content:space-between;font-size:20px;font-weight:700;margin:14px 0}
+.tot.net{align-items:center;font-size:30px;line-height:1.1;flex-wrap:wrap;column-gap:10px}
+.tot.net #net{margin-left:auto}
 .slip{display:flex;align-items:center;gap:10px;background:#f6f7f9;border-radius:10px;padding:10px;margin-top:10px}
 .slip img{width:64px;height:84px;object-fit:cover;border-radius:6px;flex:none;background:#ddd}
 .slip .t{flex:1;font-size:13px;color:#555}
@@ -118,7 +120,7 @@ main{flex:1;overflow-y:auto;min-height:0}
 .menu a,.menu div{display:block;padding:12px 16px;color:var(--text);border-bottom:1px solid #f0f0f0;font-size:15px;text-decoration:none}
 .menu div{color:var(--muted);font-size:12px}
 tr.low td{color:var(--bad)}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.13 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.16 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
@@ -191,7 +193,7 @@ tr.low td{color:var(--bad)}
   <div id="qrBox" style="display:none;text-align:center"></div>
   <div id="slipBox" style="display:none"></div>
   <input type="file" id="slipIn" accept="image/*" capture="environment" style="display:none">
-  <div class="tot"><span>ยอดสุทธิ</span><span id="net">0</span></div>
+  <div class="tot net"><span>ยอดสุทธิ</span><span id="net">0</span></div>
   <button class="btn" id="payBtn" onclick="pay()">✅ ยืนยันการขาย</button><br><br>
   <button class="btn g" onclick="closeM('mPay')">ยกเลิก</button>
 </div></div>
@@ -230,13 +232,13 @@ tr.low td{color:var(--bad)}
 </div></div>
 <div id="printArea"></div>
 
-<script src="version.js?v=1.13"></script>
-<script src="config.js?v=1.13"></script>
-<script src="api.js?v=1.13"></script>
-<script src="requisition.js?v=1.13"></script>
-<script src="report.js?v=1.13"></script>
-<script src="receipt.js?v=1.13"></script>
-<script src="offline.js?v=1.13"></script>
+<script src="version.js?v=1.16"></script>
+<script src="config.js?v=1.16"></script>
+<script src="api.js?v=1.16"></script>
+<script src="requisition.js?v=1.16"></script>
+<script src="report.js?v=1.16"></script>
+<script src="receipt.js?v=1.16"></script>
+<script src="offline.js?v=1.16"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
@@ -371,8 +373,9 @@ function openVar(p) {
 function addVar(vid) { const v = V(vid); closeM('mVar'); addLine({ key: vid, type: 'variant', id: vid, pid: v.product_id, name: vName(v), price: vPrice(v) }); }
 
 /* ---------- package picker ----------
- * สินค้าติดแพ็กเกจ (ล็อกไว้) + ช่องสินค้าที่เลือกเองจากรายการที่หลังบ้านติ๊กไว้ กด "เพิ่มช่องสินค้า" ได้เรื่อยๆ
- * ต้องรวมครบ "จำนวนชิ้นทั้งหมด" ที่ตั้งไว้หลังบ้านพอดี */
+ * สินค้าติดแพ็กเกจที่ตั้งไว้หลังบ้าน = ค่าเริ่มต้นเท่านั้น (ไม่ล็อก) หน้าร้านเปลี่ยนสินค้า/จำนวน/ลบได้
+ * เลือกได้จาก สินค้าติดแพ็กเกจ + สินค้าที่หลังบ้านติ๊กให้เลือก · ต้องรวมครบ "จำนวนชิ้นทั้งหมด" พอดี
+ * ส่งไปเซิร์ฟเวอร์เป็น selections.items = ทุกชิ้นในเซต [{id, qty}] */
 let pk = null;
 function pkDef(k) {
   if (k.pool) return { fixed: k.fixed || [], pool: k.pool, total: k.total || 0 };
@@ -382,24 +385,24 @@ function pkDef(k) {
 function openPk(id) {
   const k = cat.packages.find(x => x.package_id === id);
   const d = pkDef(k);
-  pk = { k, ...d, fixedQty: d.fixed.reduce((a, f) => a + f.qty, 0), rows: [] };
-  if (pk.total - pk.fixedQty > 0) pk.rows.push({ id: d.pool.length === 1 ? d.pool[0] : '', qty: d.pool.length === 1 ? pk.total - pk.fixedQty : 0 });
+  const fixedQty = d.fixed.reduce((a, f) => a + f.qty, 0);
+  pk = { k, ...d, allowed: [...new Set([...d.fixed.map(f => f.id), ...d.pool])], rows: d.fixed.map(f => ({ id: f.id, qty: f.qty })) };
+  if (pk.total - fixedQty > 0 || !pk.rows.length) pk.rows.push({ id: d.pool.length === 1 ? d.pool[0] : '', qty: d.pool.length === 1 ? Math.max(0, pk.total - fixedQty) : 0 });
   renderPk();
   $('mPk').classList.add('on');
   $('mPk').querySelector('.sheet').scrollTop = 0;
 }
 const pkChosen = () => pk.rows.reduce((a, r) => a + (r.id ? r.qty || 0 : 0), 0);
-const pkTotal = () => pk.fixedQty + pkChosen();
+const pkTotal = () => pkChosen();
 function renderPk() {
   const k = pk.k, total = pkTotal(), need = pk.total;
   const tcls = need ? (total === need ? 'ok' : total > need ? 'over' : '') : '';
   const left = need - total;
   $('pkSheet').innerHTML = `<h3>${esc(k.name)} · ${money(k.price)}฿</h3>${k.description ? `<div style="color:#888;font-size:13px">${esc(k.description)}</div>` : ''}
     <div class="pktotal ${tcls}"><span class="big">${total} / ${need || '-'}</span> ชิ้น<br><small>${tcls === 'ok' ? 'ครบแล้ว ✓' : tcls === 'over' ? `เกินมา ${-left} ชิ้น` : `ต้องเลือกเพิ่มอีก ${left} ชิ้น`}</small></div>
-    ${pk.fixed.length ? `<div class="pkslot"><div class="pkh"><b>สินค้าติดแพ็กเกจ</b><span>ใส่ให้อัตโนมัติ</span></div>${pk.fixed.map(f => `<div class="pkfix">🔒 ${esc(itemName(f.id))}<b>× ${f.qty}</b></div>`).join('')}</div>` : ''}
-    ${pk.total - pk.fixedQty > 0 || pk.rows.length ? `<div class="pkslot"><div class="pkh"><b>เลือกสินค้า</b><span>เลือกได้ ${Math.max(0, pk.total - pk.fixedQty)} ชิ้น</span></div>
-      ${pk.rows.map((r, i) => `<div class="pkrow"><span class="pkno">${i + 1}</span><select data-i="${i}"><option value="">— เลือกสินค้า —</option>${pk.pool.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-i="${i}">${r.qty}</button>${pk.rows.length > 1 ? `<button class="pkx" data-rm="${i}">✕</button>` : ''}</div>`).join('')}
-      <button class="btn line" id="pkAddRow" style="margin-top:6px;display:flex;justify-content:center;align-items:center" ${left <= 0 ? 'disabled' : ''}>+ เพิ่มช่องสินค้า</button></div>` : ''}
+    <div class="pkslot"><div class="pkh"><b>สินค้าในเซต</b><span>${pk.fixed.length ? 'ใส่ค่าเริ่มต้นให้แล้ว แก้ได้' : `รวม ${need || '-'} ชิ้น`}</span></div>
+      ${pk.rows.map((r, i) => `<div class="pkrow"><span class="pkno">${i + 1}</span><select data-i="${i}"><option value="">— เลือกสินค้า —</option>${pk.allowed.map(it => `<option value="${esc(it)}" ${it === r.id ? 'selected' : ''}>${esc(itemName(it))} (เหลือ ${itemStock(it) ?? '-'})</option>`).join('')}</select><button class="qbtn ${r.qty && r.id ? '' : 'zero'}" data-i="${i}">${r.qty}</button>${pk.rows.length > 1 ? `<button class="pkx" data-rm="${i}">✕</button>` : ''}</div>`).join('')}
+      <button class="btn line" id="pkAddRow" style="margin-top:6px;display:flex;justify-content:center;align-items:center" ${left <= 0 ? 'disabled' : ''}>+ เพิ่มช่องสินค้า</button></div>
     <br><button class="btn" onclick="addPk()" ${tcls !== 'ok' && need ? 'disabled' : ''}>เพิ่มเซตลงตะกร้า</button><br><br><button class="btn g" onclick="closeM('mPk')">ยกเลิก</button>`;
   $('pkSheet').querySelectorAll('select[data-i]').forEach(el => el.onchange = () => {
     const r = pk.rows[+el.dataset.i];
@@ -429,11 +432,11 @@ function addPk() {
   const total = pkTotal();
   if (pk.total && total !== pk.total) return POS.toast(`แพ็กเกจนี้ต้องมีสินค้ารวม ${pk.total} ชิ้น (ตอนนี้ ${total})`, true);
   if (!total) return POS.toast('ยังไม่ได้เลือกสินค้า', true);
-  const pool = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
+  const items = Object.keys(merged).sort().map(id => ({ id, qty: merged[id] }));
   const short = id => itemName(id).replace(/^May Protein /, '');
-  const desc = [...pk.fixed.map(f => short(f.id) + '×' + f.qty), ...pool.map(x => short(x.id) + '×' + x.qty)].join(', ');
+  const desc = items.map(x => short(x.id) + '×' + x.qty).join(', ');
   closeM('mPk');
-  addLine({ key: k.package_id + '|' + JSON.stringify(pool), type: 'package', id: k.package_id, name: k.name, price: k.price, selections: { pool }, desc });
+  addLine({ key: k.package_id + '|' + JSON.stringify(items), type: 'package', id: k.package_id, name: k.name, price: k.price, selections: { items }, desc });
 }
 
 /* ---------- numpad ---------- */
@@ -553,9 +556,11 @@ function applyDeductions(payload, sign) {
   const add = (id, q) => { const p = P(id), v = V(id); if (p && !p.has_variants) p.stock_qty += sign * q; if (v) v.stock_qty += sign * q; };
   (payload.lines || []).forEach(l => {
     if (l.type !== 'package') return add(l.id, l.qty);
+    const sel = l.selections || {};
+    if (sel.items) return sel.items.forEach(x => add(x.id, x.qty * l.qty));
     const k = cat.packages.find(x => x.package_id === l.id);
     if (k) pkDef(k).fixed.forEach(f => add(f.id, f.qty * l.qty));
-    ((l.selections || {}).pool || []).forEach(x => add(x.id, x.qty * l.qty));
+    (sel.pool || []).forEach(x => add(x.id, x.qty * l.qty));
   });
 }
 /** สร้างใบเสร็จในเครื่อง (ตัวเลขเดียวกับที่เซิร์ฟเวอร์จะคำนวณ) */
@@ -567,8 +572,13 @@ function localBill(payload, no, when) {
     items.push({ item_id: c.id, item_name: c.name, qty: c.qty, unit_price: c.price, line_total: c.price * c.qty, package_id: c.id, package_set_no: setNo, slot: '' });
     sub += c.price * c.qty;
     const k = cat.packages.find(x => x.package_id === c.id);
+    const sel = c.selections || {};
+    if (sel.items) {
+      const fixedIds = k ? pkDef(k).fixed.map(f => f.id) : [];
+      return sel.items.forEach(x => items.push({ item_id: x.id, item_name: itemName(x.id), qty: x.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: fixedIds.includes(x.id) ? 'ติดเซต' : 'เลือก' }));
+    }
     if (k) pkDef(k).fixed.forEach(f => items.push({ item_id: f.id, item_name: itemName(f.id), qty: f.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'ติดเซต' }));
-    ((c.selections || {}).pool || []).forEach(x => items.push({ item_id: x.id, item_name: itemName(x.id), qty: x.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'เลือก' }));
+    (sel.pool || []).forEach(x => items.push({ item_id: x.id, item_name: itemName(x.id), qty: x.qty * c.qty, package_id: c.id, package_set_no: setNo, slot: 'เลือก' }));
   });
   const d = Math.max(0, payload.discount_value), da = Math.min(sub, payload.discount_type === 'percent' ? sub * Math.min(d, 100) / 100 : d);
   return { bill_id: 'รอส่ง #' + no, datetime: when, subtotal: sub, discount_type: payload.discount_type, discount_value: d, discount_amount: da, total: Math.round((sub - da) * 100) / 100, payment_method: payload.payment_method, note: payload.note, staff: me.display_name, items };
