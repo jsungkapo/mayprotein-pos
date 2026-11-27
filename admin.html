@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.15">
+<link rel="stylesheet" href="styles.css?v=1.16">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -197,11 +197,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.15"></script>
-<script src="config.js?v=1.15"></script>
-<script src="api.js?v=1.15"></script>
-<script src="requisition.js?v=1.15"></script>
-<script src="receipt.js?v=1.15"></script>
+<script src="version.js?v=1.16"></script>
+<script src="config.js?v=1.16"></script>
+<script src="api.js?v=1.16"></script>
+<script src="requisition.js?v=1.16"></script>
+<script src="receipt.js?v=1.16"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -532,12 +532,12 @@ function editPackage(id, copy) {
       <div class="pkgsum" id="kSum">${summary()}</div>
 
       <div class="sec"><h4><span>1. สินค้าติดแพ็กเกจ (ค่าเริ่มต้น)</span></h4>
-      <div class="hint" style="margin-bottom:8px">สินค้าที่ต้องมีในแพ็กเกจเสมอ หน้าขายจะใส่ให้อัตโนมัติ เช่น โปรตีนรสพีช 1 ซอง (ไม่มีก็ได้)</div>
+      <div class="hint" style="margin-bottom:8px">สินค้าเริ่มต้นของแพ็กเกจ หน้าขายจะใส่ให้อัตโนมัติ แต่พนักงานเปลี่ยนเป็นสินค้าอื่นในแพ็กเกจ หรือลบออกได้ เช่น โปรตีนรสพีช 1 ซอง (ไม่มีก็ได้)</div>
       ${k.fixed.map((f, i) => `<div class="fxrow"><select><option value="">— เลือกสินค้า —</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === f.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select><input type="number" inputmode="numeric" value="${f.qty}" placeholder="จำนวน"><button class="x" data-fx="${i}">✕</button></div>`).join('')}
       <button class="btn sm line" id="fxAdd">+ เพิ่มสินค้าติดแพ็กเกจ</button></div>
 
       <div class="sec"><h4><span>2. สินค้าที่ให้ลูกค้าเลือกเอง</span></h4>
-      <div class="hint" style="margin-bottom:8px">ติ๊กสินค้าที่ลูกค้าเลือกได้ (เช่น โปรตีน 40 กรัมทุกรส) หน้าขายทุกช่องที่กด "เพิ่มช่องสินค้า" จะเลือกได้เฉพาะสินค้าที่ติ๊กไว้นี้</div>
+      <div class="hint" style="margin-bottom:8px">ติ๊กสินค้าที่ลูกค้าเลือกได้ (เช่น โปรตีน 40 กรัมทุกรส) หน้าขายจะเลือกได้จากสินค้าที่ติ๊กไว้นี้ และสินค้าติดแพ็กเกจในข้อ 1</div>
       <input id="kFilter" placeholder="🔍 กรองสินค้า" value="${esc(filter)}">
       <div class="picks">${all.filter(x => !filter || x.name.toLowerCase().includes(filter.toLowerCase()) || k.pool.includes(x.id)).map(x => `<label><input type="checkbox" data-pool value="${esc(x.id)}" ${k.pool.includes(x.id) ? 'checked' : ''}>${esc(x.name)}${x.active ? '' : ' <span class="tag">ปิด</span>'}</label>`).join('') || '<div class="hint" style="padding:8px">ไม่มีสินค้า</div>'}</div>
       <div class="hint" id="poolCnt">ติ๊กไว้ ${k.pool.length} รายการ</div></div>

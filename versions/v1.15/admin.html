@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.12">
+<link rel="stylesheet" href="styles.css?v=1.15">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -106,7 +106,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 #bulkBar .row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px}
 #bulkBar .row2{display:flex;gap:8px}
 #bulkBar .row2 .btn{flex:1}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.12 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.15 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
@@ -197,11 +197,11 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.12"></script>
-<script src="config.js?v=1.12"></script>
-<script src="api.js?v=1.12"></script>
-<script src="requisition.js?v=1.12"></script>
-<script src="receipt.js?v=1.12"></script>
+<script src="version.js?v=1.15"></script>
+<script src="config.js?v=1.15"></script>
+<script src="api.js?v=1.15"></script>
+<script src="requisition.js?v=1.15"></script>
+<script src="receipt.js?v=1.15"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -792,7 +792,7 @@ async function openDoc(req) {
   const canShare = navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'])], 'x.pdf', { type: 'application/pdf' })] });
   $('docShare').style.display = canShare ? '' : 'none';
   $('docShare').onclick = async () => {
-    try { await navigator.share({ files: [new File([await getPdf()], name, { type: 'application/pdf' })], title: name }); } catch (e) {}
+    try { await navigator.share({ files: [new File([await getPdf()], name, { type: 'application/pdf' })] }); } catch (e) {}
   };
 }
 
