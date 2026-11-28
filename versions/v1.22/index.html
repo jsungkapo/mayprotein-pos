@@ -11,7 +11,7 @@
 <link rel="icon" href="icons/icon-192.png?v=2">
 <title>MayProtein POS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.19">
+<link rel="stylesheet" href="styles.css?v=1.22">
 <style>
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 main{flex:1;overflow-y:auto;min-height:0}
@@ -120,7 +120,7 @@ main{flex:1;overflow-y:auto;min-height:0}
 .menu a,.menu div{display:block;padding:12px 16px;color:var(--text);border-bottom:1px solid #f0f0f0;font-size:15px;text-decoration:none}
 .menu div{color:var(--muted);font-size:12px}
 tr.low td{color:var(--bad)}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.19 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.22 (ข้อมูลเดียวกับระบบจริง) · <a href="../../index.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand" id="shopName">MayProtein POS</div><div style="font-size:12px;opacity:.9;cursor:pointer" id="evName" onclick="editEvent()"></div></div></div>
   <div class="who"><span id="whoName"></span><button id="menuBtn">☰</button></div>
@@ -158,9 +158,12 @@ tr.low td{color:var(--bad)}
         <div>💵 เงินสด<b id="kCash">0</b></div>
         <div>🏦 โอน<b id="kTr">0</b></div>
       </div>
+      <div class="box"><b>ยอดขายรายวัน (บาท)</b><div id="barChart" style="margin-top:8px"></div></div>
+      <div class="box"><b>สัดส่วนสินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><div id="pieChart" style="margin-top:8px"></div></div>
       <div class="box"><b>สรุปรายวัน</b><table id="dayTable"></table></div>
       <div class="box"><b>แพ็กเกจที่ขายได้</b><table id="pkTable"></table></div>
       <div class="box"><b>สินค้าที่ขายได้ (รวมในแพ็กเกจ)</b><table id="itTable"></table></div>
+      <div class="box"><b>สินค้าคงเหลือ</b> <small style="color:#888">ณ ตอนนี้ · เรียงจากเหลือน้อยไปมาก</small><table id="stTable"><tr><td class="empty">กำลังโหลด…</td></tr></table></div>
       <button class="btn" id="rPdf">📄 ดาวน์โหลดรายงาน PDF</button><br><br>
       <button class="btn line" onclick="downloadCsv()">⬇️ ดาวน์โหลดข้อมูลบิล (CSV)</button><br><br>
     </div>
@@ -232,13 +235,13 @@ tr.low td{color:var(--bad)}
 </div></div>
 <div id="printArea"></div>
 
-<script src="version.js?v=1.19"></script>
-<script src="config.js?v=1.19"></script>
-<script src="api.js?v=1.19"></script>
-<script src="requisition.js?v=1.19"></script>
-<script src="report.js?v=1.19"></script>
-<script src="receipt.js?v=1.19"></script>
-<script src="offline.js?v=1.19"></script>
+<script src="version.js?v=1.22"></script>
+<script src="config.js?v=1.22"></script>
+<script src="api.js?v=1.22"></script>
+<script src="requisition.js?v=1.22"></script>
+<script src="report.js?v=1.22"></script>
+<script src="receipt.js?v=1.22"></script>
+<script src="offline.js?v=1.22"></script>
 <script>
 const esc = POS.esc, money = POS.money;
 const MLABEL = { cash: '💵 เงินสด', transfer: '🏦 โอน', promptpay: '🏦 โอน (QR)' };
@@ -788,6 +791,42 @@ function renderSum() {
   const rows = o => Object.entries(o).sort((a, b) => b[1] - a[1]);
   $('pkTable').innerHTML = rows(g.packages).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v} เซต</td></tr>`).join('') || '<tr><td>-</td></tr>';
   $('itTable').innerHTML = rows(g.items).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join('') || '<tr><td>-</td></tr>';
+  drawSumCharts(g);
+  loadStock().then(() => renderStock(g));
+}
+// กราฟวาดใหม่ตามความกว้างจอ
+function drawSumCharts(g) {
+  g = g || (sum && SalesReport.aggregate(sum.bills));
+  if (!g || $('sumBody').style.display === 'none') return;
+  const w = $('barChart').clientWidth || 340;
+  $('barChart').replaceChildren(SalesReport.chartCanvas('bar', SalesReport.dayData(g, sum.from, sum.to), w));
+  $('pieChart').replaceChildren(SalesReport.chartCanvas('pie', SalesReport.pieData(g.items), w));
+}
+let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => drawSumCharts(), 200); });
+
+/* สินค้าคงเหลือทุกรายการ (รวมที่ปิดขาย) จากข้อมูลหลังบ้าน */
+let stockAll = null;
+async function loadStock() {
+  try { const r = await POS.call('getAdminData'); stockAll = { products: r.products, variants: r.variants }; }
+  catch (e) { if (!stockAll) $('stTable').innerHTML = `<tr><td class="empty">${esc(e.message)}</td></tr>`; }
+}
+function stockRows(g) {
+  if (!stockAll) return [];
+  const out = [];
+  stockAll.products.forEach(p => {
+    const vs = stockAll.variants.filter(v => v.product_id === p.product_id);
+    if (!p.has_variants) out.push({ id: p.product_id, name: p.name, stock: p.stock_qty, active: p.active });
+    vs.forEach(v => out.push({ id: v.variant_id, name: p.name + ' ' + [v.size, v.color].filter(Boolean).join(' / '), stock: v.stock_qty, active: v.active && p.active }));
+  });
+  out.forEach(r => { r.sold = g.itemIds[r.id] || 0; r.state = r.stock <= 0 ? 'หมด' : r.stock <= 5 ? 'เหลือน้อย' : r.active ? '' : 'ปิดขาย'; });
+  return out.sort((a, b) => a.stock - b.stock || b.sold - a.sold);
+}
+function renderStock(g) {
+  const rs = stockRows(g);
+  if (!stockAll) return;
+  const cls = { 'หมด': 'bad', 'เหลือน้อย': 'warn', 'ปิดขาย': '' };
+  $('stTable').innerHTML = '<tr><th>สินค้า</th><th class="n">ขายได้</th><th class="n">เหลือ</th></tr>' +
+    (rs.map(r => `<tr><td>${esc(r.name)}${r.state ? ` <span class="tag ${cls[r.state]}">${r.state}</span>` : ''}</td><td class="n">${r.sold || '-'}</td><td class="n"><b style="color:${r.stock <= 0 ? 'var(--bad)' : 'inherit'}">${r.stock}</b></td></tr>`).join('') || '<tr><td class="empty">ไม่มีสินค้า</td></tr>');
 }
 function askReport() {
   if (!sum) return;
@@ -801,7 +840,7 @@ function askReport() {
     if (!title) return POS.toast('ใส่ชื่องานขายก่อน เช่น ATM', true);
     const b = $('askOk'); b.disabled = true; b.innerHTML = '<span class="spin"></span> กำลังสร้าง PDF';
     try {
-      const blob = await SalesReport.pdf({ title, from: sum.from, to: sum.to, bills: sum.bills, shop: cat.settings.shop_name, by: me.display_name, printedAt: new Date().toLocaleString('th-TH') });
+      const blob = await SalesReport.pdf({ title, from: sum.from, to: sum.to, bills: sum.bills, stock: stockRows(SalesReport.aggregate(sum.bills)), shop: cat.settings.shop_name, by: me.display_name, printedAt: new Date().toLocaleString('th-TH') });
       const name = `สรุปยอดขาย-${title.replace(/[\\/:*?"<>|]/g, '')}-${sum.from}${sum.to !== sum.from ? '_' + sum.to : ''}.pdf`;
       const file = new File([blob], name, { type: 'application/pdf' });
       closeM('mAsk');

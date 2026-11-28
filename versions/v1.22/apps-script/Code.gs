@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.19'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.22'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -16,8 +16,9 @@ const BUG_FOLDER = 'MayProtein POS Bug Reports'; // รูปแนบราย�
 const BUG_STATUS = ['ใหม่', 'กำลังแก้', 'แก้แล้ว', 'ไม่แก้'];
 
 const SCHEMA = {
-  Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
+  Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active', 'pack_unit', 'pack_size'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
+  StockCounts: ['count_id', 'datetime', 'note', 'staff', 'checked', 'matched', 'short_items', 'short_qty', 'over_items', 'over_qty', 'not_counted', 'items_json'],
   BugReports: ['report_id', 'created_at', 'user_id', 'username', 'display_name', 'title', 'detail', 'images', 'app_version', 'device', 'status', 'resolution', 'updated_at', 'updated_by'],
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty', 'lock_fixed'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
@@ -84,7 +85,7 @@ const ADMIN_ACTIONS = {
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
   uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_,
   createRequisition: createRequisition_, listRequisitions: listRequisitions_, getSlip: getSlip_,
-  setProductsActive: setProductsActive_
+  setProductsActive: setProductsActive_, listStockCounts: listStockCounts_
 };
 // เฉพาะ master (สิทธิ์สูงสุด): ตั้งค่าระบบ + ปรับสต็อกรายการเดียว
 const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_, listBugs: listBugs_, updateBug: updateBug_, getBugImage: getBugImage_ };
@@ -152,7 +153,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v13')) return;
+  if (cache.get('setup_ok_v15')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -176,13 +177,13 @@ function ensureSetup_() {
   st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
   // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
   withLock_(function () {
-    if (cache.get('setup_ok_v13')) return;
+    if (cache.get('setup_ok_v15')) return;
     const have = {};
     readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
     Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
       if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
     });
-    cache.put('setup_ok_v13', '1', 21600);
+    cache.put('setup_ok_v15', '1', 21600);
   });
 }
 
@@ -257,7 +258,7 @@ function settingsMap_() {
 /* ---------------- Activity log ---------------- */
 
 const LABELS = {
-  name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน',
+  name: 'ชื่อ', sku: 'SKU', category: 'หมวดหมู่', subcategory: 'หมวดย่อย', unit: 'หน่วย', price: 'ราคา', cost: 'ต้นทุน', pack_unit: 'หน่วยใหญ่', pack_size: 'จำนวนต่อหน่วยใหญ่',
   description: 'คำอธิบาย', total_qty: 'จำนวนชิ้นทั้งหมด', lock_fixed: 'ล็อกสินค้าติดแพ็กเกจ', size: 'ไซซ์', color: 'สี', shop_name: 'ชื่อร้าน', current_event: 'ชื่องาน',
   categories: 'หมวดหมู่', subcategories: 'หมวดย่อย', units: 'หน่วย', promptpay_qr_image_url: 'รูป QR', logo_url: 'โลโก้', department: 'แผนก',
   receipt_name: 'ชื่อบนใบเสร็จ', receipt_address: 'ที่อยู่', receipt_phone: 'เบอร์โทร', receipt_tax_id: 'เลขประจำตัวผู้เสียภาษี',
@@ -399,7 +400,9 @@ function cleanProduct_(r, admin) {
     product_id: str_(r.product_id), sku: str_(r.sku), name: str_(r.name), category: str_(r.category),
     subcategory: str_(r.subcategory), unit: str_(r.unit), price: num_(r.price),
     has_variants: bool_(r.has_variants), stock_qty: num_(r.stock_qty), description: str_(r.description),
-    image_url: str_(r.image_url), active: bool_(r.active)
+    image_url: str_(r.image_url), active: bool_(r.active),
+    // หน่วยใหญ่ (เช่น กล่อง = 7 ซอง) ใช้ตอนนับสต็อก/รับของ — สต็อกเก็บเป็นหน่วยเล็กเสมอ
+    pack_unit: str_(r.pack_unit), pack_size: Math.max(0, Math.round(num_(r.pack_size)))
   };
   if (admin) o.cost = num_(r.cost);
   return o;
@@ -975,8 +978,10 @@ function saveProduct_(p, user) {
     const obj = {
       sku: sku, name: name, category: str_(p.category), subcategory: str_(p.subcategory), unit: str_(p.unit),
       price: num_(p.price), cost: num_(p.cost), description: str_(p.description), image_url: str_(p.image_url),
-      active: p.active !== false
+      active: p.active !== false, pack_unit: '', pack_size: ''
     };
+    const ps = Math.round(num_(p.pack_size));
+    if (str_(p.pack_unit) && ps > 1) { obj.pack_unit = str_(p.pack_unit); obj.pack_size = ps; }
     if (id) {
       const r = rows.filter(function (x) { return str_(x.product_id) === id; })[0];
       if (!r) throw new Error('ไม่พบสินค้า');
@@ -1258,12 +1263,18 @@ function stockCount_(p, user) {
     const idx = stockIndex_();
     const adjusted = [];
     let matched = 0;
+    const lines = []; // ทุกรายการที่นับ (เก็บเป็นเอกสารสรุปการนับ)
     counts.forEach(function (c) {
       const id = str_(c.item_id);
       const it = idx[id];
       if (!it || it.has_variants) return;
       const counted = Math.round(num_(c.counted));
       const delta = counted - Math.round(num_(c.system_qty));
+      const prod = it.product || (idx[str_(it.variant.product_id)] || {}).product || {};
+      lines.push({ id: id, name: it.name, sku: str_((it.variant || it.product || {}).sku), unit: str_(prod.unit), cat: str_(prod.category) || 'อื่นๆ',
+        cost: num_(prod.cost), system: Math.round(num_(c.system_qty)), counted: counted, diff: delta,
+        pack_unit: str_(prod.pack_unit), pack_size: Math.round(num_(prod.pack_size)) || 0,
+        packs: c.packs === undefined || c.packs === '' ? null : Math.round(num_(c.packs)), loose: c.loose === undefined || c.loose === '' ? null : Math.round(num_(c.loose)) });
       if (!delta) { matched++; return; }
       changeStock_(idx, id, delta);
       adjusted.push({ item_id: id, name: it.name, system_qty: num_(c.system_qty), counted: counted, delta: delta, stock_qty: it.stock });
@@ -1279,10 +1290,32 @@ function stockCount_(p, user) {
         };
       }));
     }
-    log_(user, 'นับสต็อก', 'สต็อก', '', str_(p.note), 'นับ ' + counts.length + ' รายการ · ตรง ' + matched + ' · ปรับ ' + adjusted.length +
+    // บันทึกใบสรุปการนับ
+    const short = lines.filter(function (l) { return l.diff < 0; }), over = lines.filter(function (l) { return l.diff > 0; });
+    const sum = function (a) { return a.reduce(function (t, l) { return t + l.diff; }, 0); };
+    const rec = {
+      count_id: nextId_(readTable_('StockCounts'), 'count_id', 'SC', 4), datetime: now_(), note: str_(p.note), staff: user.display_name,
+      checked: lines.length, matched: matched, short_items: short.length, short_qty: sum(short), over_items: over.length, over_qty: sum(over),
+      not_counted: Math.max(0, Math.round(num_(p.total_items)) - lines.length), items_json: JSON.stringify(lines)
+    };
+    appendRow_('StockCounts', rec);
+    log_(user, 'นับสต็อก', 'สต็อก', rec.count_id, str_(p.note), 'นับ ' + counts.length + ' รายการ · ตรง ' + matched + ' · ปรับ ' + adjusted.length +
       (adjusted.length ? ' — ' + adjusted.map(function (a) { return a.name + ' ' + a.system_qty + '→' + a.counted; }).join(', ') : ''));
-    return { checked: counts.length, matched: matched, adjusted: adjusted };
+    return { checked: counts.length, matched: matched, adjusted: adjusted, count: cleanCount_(rec) };
   });
+}
+
+function cleanCount_(r) {
+  let items = [];
+  try { items = JSON.parse(str_(r.items_json) || '[]'); } catch (e) {}
+  return {
+    count_id: str_(r.count_id), datetime: str_(r.datetime), note: str_(r.note), staff: str_(r.staff), checked: num_(r.checked), matched: num_(r.matched),
+    short_items: num_(r.short_items), short_qty: num_(r.short_qty), over_items: num_(r.over_items), over_qty: num_(r.over_qty), not_counted: num_(r.not_counted), items: items
+  };
+}
+/** ประวัติการนับสต็อก (ล่าสุดก่อน 30 ครั้ง) */
+function listStockCounts_() {
+  return { counts: readTable_('StockCounts').slice(-30).reverse().map(cleanCount_) };
 }
 
 /* ---------------- Bug reports ---------------- */
@@ -1371,7 +1404,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v13');
+  CacheService.getScriptCache().remove('setup_ok_v15');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

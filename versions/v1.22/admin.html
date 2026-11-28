@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.19">
+<link rel="stylesheet" href="styles.css?v=1.22">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -83,6 +83,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 .crow .t b{display:block;font-size:14px;line-height:1.3}
 .crow .t small{color:var(--muted);font-size:12px}
 .crow input{width:72px;flex:none;text-align:center;font-size:18px;font-weight:700;padding:8px 4px}
+.crow .pk{display:flex;gap:4px;flex:none;align-items:flex-end}.crow .pk label{display:block;font-size:10px;color:var(--muted);text-align:center;margin:0}.crow .pk input{width:58px}
 .crow .tick{width:44px;height:44px;flex:none;border-radius:50%;border:2px solid #ccc;background:#fff;font-size:22px;color:#ccc;line-height:1}
 .crow.ok{border-color:#bfe6cf;background:#f3fbf6}.crow.ok .tick{background:var(--ok);border-color:var(--ok);color:#fff}
 .crow.diff{border-color:#f5d48a;background:#fffaf0}
@@ -106,7 +107,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 #bulkBar .row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px}
 #bulkBar .row2{display:flex;gap:8px}
 #bulkBar .row2 .btn{flex:1}
-</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.19 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
+</style></head><body><div style="background:#333;color:#fff;font:600 13px sans-serif;padding:6px 12px;text-align:center">เวอร์ชันสำรอง v1.22 (ข้อมูลเดียวกับระบบจริง) · <a href="../../admin.html" style="color:#9cf">กลับเวอร์ชันล่าสุด</a></div>
 <header class="top">
   <div class="lg"><img id="logo" alt="" style="display:none"><div><div class="brand">หลังบ้าน</div><div style="font-size:12px;opacity:.9"><a href="index.html" class="back">← กลับหน้าขาย</a></div></div></div>
   <div class="who"><span id="whoName"></span><button onclick="POS.updateSystem(this)" title="อัปเดตระบบเป็นเวอร์ชันล่าสุด">🔄</button><button onclick="POS.logout()">ออก</button></div>
@@ -149,7 +150,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
       <label>สินค้า</label><select id="stItem"></select>
       <label>ปรับสต็อก</label>
       <div class="seg" id="stDir"><button type="button" data-d="1" class="on">➕ เพิ่ม</button><button type="button" data-d="-1">➖ ลด</button></div>
-      <label id="stQtyLbl">จำนวนที่เพิ่ม</label><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" id="stQty" value="10">
+      <label id="stQtyLbl">จำนวนที่เพิ่ม</label><div class="row" style="gap:6px"><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" id="stQty" value="10"><select id="stUnit" style="flex:none;width:130px;display:none"></select></div>
       <label>หมายเหตุ</label><input id="stNote" placeholder="เช่น ของเสียหาย">
       <br><br><button class="btn" id="stBtn">บันทึก (เพิ่มสต็อก)</button>
     </details>
@@ -173,6 +174,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
     <div class="hint" style="margin:8px 4px">ติ๊ก ✓ ถ้านับได้ตรงกับในระบบ หรือพิมพ์จำนวนที่นับได้ถ้าไม่ตรง · ระบบจำที่นับไว้ในเครื่องนี้ ปิดแอปแล้วกลับมานับต่อได้</div>
     <button class="btn" id="cSave">บันทึกผลการนับ</button><br><br>
     <button class="btn g" id="cClear">ล้างที่นับไว้ทั้งหมด</button><br><br>
+    <div class="box"><h4 style="margin:0 0 8px;display:flex;justify-content:space-between">ประวัติการนับสต็อก <a onclick="loadCounts()" style="font-weight:400">↻</a></h4><div id="scList"><div class="empty">-</div></div></div>
   </div>
   <div class="page" id="p-log">
     <div class="row" style="gap:6px;margin-bottom:10px"><input id="lQ" placeholder="🔍 ค้นหา ชื่อสินค้า / คน / บิล"><select id="lF" style="flex:none;width:130px"><option value="">ทั้งหมด</option><option>บิล</option><option value="@สลิป">บิลที่มีสลิป</option><option value="สต็อก">สต็อก</option><option>สินค้า</option><option>ไซซ์/สี</option><option>แพ็กเกจ</option><option>พนักงาน</option><option>ตั้งค่า</option><option value="@ลบ">เฉพาะที่ลบ</option></select></div>
@@ -185,6 +187,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mDoc"><div class="sheet" style="max-width:820px">
   <h3 id="docTitle">ใบเบิก</h3>
   <div class="row" style="margin-bottom:10px"><button class="btn sm" id="docDl">⬇️ ดาวน์โหลด PDF</button><button class="btn sm line" id="docShare">📤 แชร์</button></div>
+  <div id="docSum"></div>
   <div id="docPages"><div class="loading"><span class="spin dark"></span>กำลังสร้างใบเบิก</div></div>
   <br><button class="btn g" onclick="closeM('mDoc')">ปิด</button>
 </div></div>
@@ -197,11 +200,12 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.19"></script>
-<script src="config.js?v=1.19"></script>
-<script src="api.js?v=1.19"></script>
-<script src="requisition.js?v=1.19"></script>
-<script src="receipt.js?v=1.19"></script>
+<script src="version.js?v=1.22"></script>
+<script src="config.js?v=1.22"></script>
+<script src="api.js?v=1.22"></script>
+<script src="requisition.js?v=1.22"></script>
+<script src="stockcount.js?v=1.22"></script>
+<script src="receipt.js?v=1.22"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -232,7 +236,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
   if (b.dataset.t === 'users') load();
   if (b.dataset.t === 'stock') { renderStockTab(); initReq(); loadReqs(); load().then(() => { renderStockTab(); if (rq.lines.every(l => !l.item_id && !l.custom)) renderReqLines(); }); }
-  if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); }
+  if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); loadCounts(); }
   if (b.dataset.t === 'log') loadLogs();
   if (b.dataset.t === 'set') loadBugs();
 });
@@ -395,6 +399,8 @@ function editProduct(id, copy) {
       <label>ชื่อสินค้า *</label><input id="fName" value="${esc(p.name)}">
       <div class="row"><div><label>SKU</label><input id="fSku" value="${esc(p.sku)}" autocapitalize="characters"></div><div><label>หน่วย</label><select id="fUnit">${opts(list(s.units), p.unit)}</select></div></div>
       <div class="row"><div><label>หมวดหมู่</label><select id="fCat">${opts(list(s.categories), p.category)}</select></div><div><label>หมวดย่อย</label><select id="fSub">${opts(list(s.subcategories), p.subcategory)}</select></div></div>
+      <div class="row"><div><label>หน่วยใหญ่ (ถ้ามี)</label><input id="fPU" value="${esc(p.pack_unit || '')}" placeholder="เช่น กล่อง"></div><div><label>1 หน่วยใหญ่ = กี่${esc(p.unit || 'หน่วย')}</label><input id="fPS" type="number" inputmode="numeric" pattern="[0-9]*" value="${p.pack_size || ''}" placeholder="เช่น 7"></div></div>
+      <div class="hint" style="margin-top:-4px">สต็อกนับเป็นหน่วยเล็กเสมอ หน่วยใหญ่ช่วยให้นับสต็อก/รับของเป็นกล่องได้ (ระบบคูณให้) · ขายทั้งกล่องให้สร้างแพ็กเกจแบบล็อก</div>
       <div class="row"><div><label>ราคาขาย (บาท)</label><input id="fPrice" type="number" inputmode="decimal" value="${p.price}"></div><div><label>ต้นทุน (บาท)</label><input id="fCost" type="number" inputmode="decimal" value="${p.cost}"></div></div>
       <label>คำอธิบาย</label><textarea id="fDesc" rows="2">${esc(p.description)}</textarea>
       <label class="chk"><input type="checkbox" id="fAct" ${p.active ? 'checked' : ''}> เปิดขาย (แสดงในหน้าขาย)</label>
@@ -426,6 +432,7 @@ function editProduct(id, copy) {
     };
   };
   const keep = () => {
+    p.pack_unit = $('fPU').value.trim(); p.pack_size = Math.round(+$('fPS').value) || '';
     p.name = $('fName').value; p.sku = $('fSku').value; p.unit = $('fUnit').value; p.category = $('fCat').value; p.subcategory = $('fSub').value;
     p.price = $('fPrice').value; p.cost = $('fCost').value; p.description = $('fDesc').value; p.active = $('fAct').checked;
   };
@@ -436,7 +443,7 @@ function editProduct(id, copy) {
     await waitUploads(b);
     if (isTemp(p.image_url)) { POS.toast('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง', true); busy(b, false, 'บันทึก'); return; }
     try {
-      const r = await POS.call('saveProduct', { product_id: id || '', name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
+      const r = await POS.call('saveProduct', { product_id: id || '', name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active, pack_unit: p.pack_unit || '', pack_size: p.pack_size || '' });
       POS.toast('บันทึกแล้ว');
       if (!id) {
         for (const v of copyVars) {
@@ -445,7 +452,7 @@ function editProduct(id, copy) {
         }
         await load(); editProduct(r.product_id); return;
       }
-      Object.assign(P(id), { name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active });
+      Object.assign(P(id), { name: p.name.trim(), sku: p.sku.trim(), unit: p.unit, category: p.category, subcategory: p.subcategory, price: +p.price || 0, cost: +p.cost || 0, description: p.description.trim(), image_url: p.image_url, active: p.active, pack_unit: p.pack_size > 1 && p.pack_unit ? p.pack_unit : '', pack_size: p.pack_size > 1 && p.pack_unit ? p.pack_size : 0 });
       renderProducts(); closeM('mEdit'); load();
     } catch (e) { POS.toast(e.message, true); busy(b, false); }
   };
@@ -591,15 +598,23 @@ const saveDraft = () => { try { localStorage.setItem(COUNT_KEY, JSON.stringify(d
 function countItems() {
   const a = [];
   D.products.forEach(p => {
-    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: p.name + ' ' + vLabel(v), sku: v.sku, cat: p.category || 'อื่นๆ', stock: v.stock_qty, unit: p.unit, off: !p.active || !v.active }));
-    else a.push({ id: p.product_id, name: p.name, sku: p.sku, cat: p.category || 'อื่นๆ', stock: p.stock_qty, unit: p.unit, off: !p.active });
+    const pk = p.pack_size > 1 && p.pack_unit ? { pu: p.pack_unit, ps: p.pack_size } : { pu: '', ps: 0 };
+    if (p.has_variants) varsOf(p.product_id).forEach(v => a.push({ id: v.variant_id, name: p.name + ' ' + vLabel(v), sku: v.sku, cat: p.category || 'อื่นๆ', stock: v.stock_qty, unit: p.unit, off: !p.active || !v.active, ...pk }));
+    else a.push({ id: p.product_id, name: p.name, sku: p.sku, cat: p.category || 'อื่นๆ', stock: p.stock_qty, unit: p.unit, off: !p.active, ...pk });
   });
   return a;
+}
+/** 150 ซอง → "21 กล่อง 3 ซอง" (สินค้าที่มีหน่วยใหญ่) */
+function packText(n, it) {
+  if (!it || !(it.ps > 1)) return '';
+  const neg = n < 0; n = Math.abs(n);
+  const b = Math.floor(n / it.ps), r = n % it.ps;
+  return (neg ? '-' : '') + ([b ? `${b} ${it.pu}` : '', r ? `${r} ${it.unit || 'ชิ้น'}` : ''].filter(Boolean).join(' ') || `0 ${it.unit || ''}`);
 }
 function cState(it) {
   const d = draft.items[it.id];
   if (!d || d.counted === '' || d.counted == null) return { sys: it.stock, counted: '', st: 'todo' };
-  return { sys: d.system_qty, counted: d.counted, st: +d.counted === +d.system_qty ? 'ok' : 'diff' };
+  return { sys: d.system_qty, counted: d.counted, packs: d.packs ?? '', loose: d.loose ?? '', st: +d.counted === +d.system_qty ? 'ok' : 'diff' };
 }
 function renderCount() {
   const all = countItems();
@@ -615,21 +630,33 @@ function renderCount() {
   show.forEach(({ it, s }) => {
     if (it.cat !== last) { html += `<div class="grp">${esc(it.cat)}</div>`; last = it.cat; }
     const dv = s.st === 'diff' ? (s.counted - s.sys > 0 ? '+' : '') + (s.counted - s.sys) : '';
-    html += `<div class="crow ${s.st}" data-id="${esc(it.id)}"><div class="t"><b>${esc(it.name)}</b><small>ในระบบ ${s.sys}${s.st !== 'todo' && s.sys !== it.stock ? ` (ตอนนี้ ${it.stock})` : ''}</small> ${dv ? `<span class="dv">ต่าง ${dv}</span>` : ''}</div>
-      <input type="number" inputmode="numeric" pattern="[0-9]*" placeholder="นับได้" value="${s.counted}"><button class="tick" title="ตรงกับในระบบ">✓</button></div>`;
+    const pk = it.ps > 1;
+    html += `<div class="crow ${s.st}" data-id="${esc(it.id)}"><div class="t"><b>${esc(it.name)}</b><small>ในระบบ ${s.sys}${pk ? ` (${packText(s.sys, it)})` : ''}${s.st !== 'todo' && s.sys !== it.stock ? ` (ตอนนี้ ${it.stock})` : ''}</small>${pk && s.st !== 'todo' ? `<small style="display:block">นับได้รวม <b style="display:inline;font-size:12px">${s.counted}</b> ${esc(it.unit || '')}</small>` : ''} ${dv ? `<span class="dv">ต่าง ${dv}</span>` : ''}</div>
+      ${pk ? `<div class="pk"><div><label>${esc(it.pu)} (×${it.ps})</label><input data-k="packs" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${s.packs}"></div><div><label>${esc(it.unit || '')}แยก</label><input data-k="loose" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${s.loose}"></div></div>`
+          : `<input type="number" inputmode="numeric" pattern="[0-9]*" placeholder="นับได้" value="${s.counted}">`}<button class="tick" title="ตรงกับในระบบ">✓</button></div>`;
   });
   $('cList').innerHTML = html || '<div class="empty">ไม่มีรายการ</div>';
   $('cList').querySelectorAll('.crow').forEach(row => {
     const id = row.dataset.id, it = all.find(x => x.id === id);
-    const set = v => {
+    const set = (v, extra) => {
       if (v === '' || v == null) delete draft.items[id];
-      else draft.items[id] = { system_qty: draft.items[id] ? draft.items[id].system_qty : it.stock, counted: Math.max(0, Math.round(+v)) };
+      else draft.items[id] = Object.assign({ system_qty: draft.items[id] ? draft.items[id].system_qty : it.stock, counted: Math.max(0, Math.round(+v)) }, extra || {});
       saveDraft();
     };
-    row.querySelector('input').onchange = e => { set(e.target.value.trim()); renderCount(); };
+    if (it.ps > 1) {
+      // กล่อง × จำนวนต่อกล่อง + แยก = จำนวนที่นับได้ (หน่วยเล็ก)
+      const ip = row.querySelector('[data-k=packs]'), il = row.querySelector('[data-k=loose]');
+      const upd = () => {
+        const a = ip.value.trim(), b = il.value.trim();
+        if (a === '' && b === '') set('');
+        else { const packs = Math.max(0, Math.round(+a || 0)), loose = Math.max(0, Math.round(+b || 0)); set(packs * it.ps + loose, { packs, loose }); }
+        renderCount();
+      };
+      ip.onchange = upd; il.onchange = upd;
+    } else row.querySelector('input').onchange = e => { set(e.target.value.trim()); renderCount(); };
     row.querySelector('.tick').onclick = () => {
       const s = cState(it);
-      if (s.st === 'ok') set(''); else { delete draft.items[id]; set(it.stock); }
+      if (s.st === 'ok') set(''); else { delete draft.items[id]; set(it.stock, it.ps > 1 ? { packs: Math.floor(it.stock / it.ps), loose: it.stock % it.ps } : null); }
       renderCount();
     };
   });
@@ -643,7 +670,7 @@ $('cClear').onclick = async () => {
 };
 $('cSave').onclick = async () => {
   const all = countItems();
-  const counts = Object.keys(draft.items).filter(id => all.some(x => x.id === id)).map(id => ({ item_id: id, system_qty: draft.items[id].system_qty, counted: draft.items[id].counted }));
+  const counts = Object.keys(draft.items).filter(id => all.some(x => x.id === id)).map(id => ({ item_id: id, system_qty: draft.items[id].system_qty, counted: draft.items[id].counted, packs: draft.items[id].packs ?? '', loose: draft.items[id].loose ?? '' }));
   if (!counts.length) return POS.toast('ยังไม่ได้นับสินค้ารายการไหนเลย', true);
   const diffs = counts.filter(c => +c.counted !== +c.system_qty);
   const lines = diffs.slice(0, 12).map(c => `• ${itemName(c.item_id)}: ${c.system_qty} → ${c.counted}`);
@@ -652,23 +679,55 @@ $('cSave').onclick = async () => {
   if (!ok) return;
   const b = $('cSave'); busy(b, true);
   try {
-    const r = await POS.call('stockCount', { counts, note: draft.note || '' });
+    const r = await POS.call('stockCount', { counts, note: draft.note || '', total_items: all.length });
     draft = { items: {} }; saveDraft();
     POS.toast(`บันทึกแล้ว · ตรง ${r.matched} · ปรับ ${r.adjusted.length} รายการ`);
-    busy(b, false); await load(); renderCount();
+    busy(b, false);
+    if (r.count) { COUNTS = [r.count].concat(COUNTS || []); renderCounts(); openCountDoc(r.count); }
+    await load(); renderCount();
   } catch (e) { POS.toast(e.message, true); busy(b, false); }
 };
 
+/* ---------- ใบสรุปการนับสต็อก ---------- */
+let COUNTS = null;
+async function loadCounts() {
+  try { COUNTS = (await POS.call('listStockCounts')).counts; renderCounts(); }
+  catch (e) { $('scList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderCounts() {
+  if (!COUNTS) return;
+  $('scList').innerHTML = COUNTS.map((c, i) => `<div class="rqi"><div class="t"><b>${esc(c.count_id)}${c.note ? ' · ' + esc(c.note) : ''}</b>
+    <small>${esc(Requisition.thaiDate(c.datetime.slice(0, 10)))} ${esc(c.datetime.slice(11, 16))} · ${esc(c.staff)} · นับ ${c.checked} · ตรง ${c.matched}${c.short_items ? ` · <span style="color:var(--bad)">ขาด ${c.short_items}</span>` : ''}${c.over_items ? ` · <span style="color:var(--warn)">เกิน ${c.over_items}</span>` : ''}</small></div>
+    <button class="btn sm line" data-sc="${i}">📄 ดู / PDF</button></div>`).join('') || '<div class="empty">ยังไม่เคยบันทึกการนับ</div>';
+  $('scList').querySelectorAll('[data-sc]').forEach(b => b.onclick = () => openCountDoc(COUNTS[+b.dataset.sc]));
+}
+function openCountDoc(c) {
+  const diffs = c.items.filter(l => l.diff).sort((a, b) => a.diff - b.diff);
+  const sumHtml = `<div class="box" style="background:#f7f9fb">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><span class="tag">นับ ${c.checked} รายการ</span><span class="tag ok">ตรง ${c.matched}</span>${c.short_items ? `<span class="tag bad">ขาด ${c.short_items} รายการ (${c.short_qty})</span>` : ''}${c.over_items ? `<span class="tag warn">เกิน ${c.over_items} รายการ (+${c.over_qty})</span>` : ''}${c.not_counted ? `<span class="tag">ยังไม่นับ ${c.not_counted}</span>` : ''}</div>
+    ${diffs.length ? diffs.slice(0, 8).map(l => `<div style="font-size:14px">• ${esc(l.name)}: ${l.system} → ${l.counted} <b style="color:${l.diff < 0 ? 'var(--bad)' : 'var(--warn)'}">(${l.diff > 0 ? '+' : ''}${l.diff})</b></div>`).join('') + (diffs.length > 8 ? `<div class="hint">… และอีก ${diffs.length - 8} รายการ (ดูในเอกสาร)</div>` : '') : '<div style="font-size:14px;color:var(--ok)">✓ ทุกรายการตรงกับระบบ</div>'}</div>`;
+  showDoc({ title: `สรุปการนับสต็อก ${c.count_id}`, what: 'ใบสรุปการนับ', sumHtml, name: StockCountDoc.fileName(c),
+    pages: () => StockCountDoc.renderPages(c, { shop: D.settings.shop_name, printedAt: new Date().toLocaleString('th-TH') }) });
+}
+
 /* ---------- stock in ---------- */
+function stUnitOpts() {
+  const it = countItems().find(x => x.id === $('stItem').value);
+  const has = it && it.ps > 1;
+  $('stUnit').style.display = has ? '' : 'none';
+  $('stUnit').innerHTML = has ? `<option value="base">${esc(it.unit || 'ชิ้น')}</option><option value="pack">${esc(it.pu)} (×${it.ps})</option>` : '';
+}
+$('stItem').addEventListener('change', stUnitOpts);
 function renderStockTab() {
   const a = countItems(), sel = $('stItem').value, q = $('stQ').value.trim().toLowerCase();
   if (!$('stEv').value) $('stEv').value = POS.pref('event') || D.settings.current_event || '';
   $('stItem').innerHTML = a.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (เหลือ ${x.stock})</option>`).join('');
   if (sel && a.some(x => x.id === sel)) $('stItem').value = sel;
+  stUnitOpts();
   let html = '', last = null;
   a.filter(x => !q || (x.name + ' ' + (x.sku || '')).toLowerCase().includes(q)).forEach(x => {
     if (x.cat !== last) { html += `<tr><td colspan="2" class="grp" style="padding-top:10px">${esc(x.cat)}</td></tr>`; last = x.cat; }
-    html += `<tr data-id="${esc(x.id)}" style="cursor:pointer${x.stock <= 0 ? ';color:var(--bad)' : ''}"><td>${esc(x.name)}${x.off ? ' <span class="tag">ปิดขาย</span>' : ''}</td><td class="n"><b>${x.stock}</b></td></tr>`;
+    html += `<tr data-id="${esc(x.id)}" style="cursor:pointer${x.stock <= 0 ? ';color:var(--bad)' : ''}"><td>${esc(x.name)}${x.off ? ' <span class="tag">ปิดขาย</span>' : ''}</td><td class="n"><b>${x.stock}</b>${x.ps > 1 && x.stock > 0 ? `<br><small style="color:var(--muted);font-weight:400">${esc(packText(x.stock, x))}</small>` : ''}</td></tr>`;
   });
   $('stTable').innerHTML = html || '<tr><td class="empty">ยังไม่มีสินค้า</td></tr>';
   $('stTable').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => {
@@ -687,7 +746,9 @@ $('stDir').querySelectorAll('button').forEach(b => b.onclick = () => {
   $('stBtn').textContent = stDir < 0 ? 'บันทึก (ลดสต็อก)' : 'บันทึก (เพิ่มสต็อก)';
 });
 $('stBtn').onclick = async () => {
-  const id = $('stItem').value, q = stDir * Math.abs(Math.round(+String($('stQty').value).replace(/[^0-9.]/g, '') || 0));
+  const id = $('stItem').value, it0 = countItems().find(x => x.id === id);
+  const mult = it0 && it0.ps > 1 && $('stUnit').value === 'pack' ? it0.ps : 1;
+  const q = stDir * mult * Math.abs(Math.round(+String($('stQty').value).replace(/[^0-9.]/g, '') || 0));
   if (!id || !q) return POS.toast('เลือกสินค้าและใส่จำนวน', true);
   const ev = $('stEv').value.trim(); POS.pref('event', ev);
   const b = $('stBtn'); busy(b, true);
@@ -718,7 +779,8 @@ function initReq() {
 function keepReq() {
   $('rqLines').querySelectorAll('.rqline').forEach((el, i) => {
     const l = rq.lines[i]; if (!l) return;
-    const sel = el.querySelector('select').value;
+    const sel = el.querySelector('select:not([data-f])').value;
+    const pu = el.querySelector('[data-f=pu]'); l.pu = pu ? pu.value : 'base';
     l.item_id = sel === '__custom' ? '' : sel;
     l.custom = sel === '__custom';
     const nm = el.querySelector('[data-f=name]'); l.name = nm ? nm.value : '';
@@ -733,7 +795,8 @@ function renderReqLines() {
       <select><option value="">— เลือกสินค้า —</option>${items.map(x => `<option value="${esc(x.id)}" ${x.id === l.item_id ? 'selected' : ''}>${esc(x.name)} (เหลือ ${x.stock})</option>`).join('')}<option value="__custom" ${l.custom ? 'selected' : ''}>✏️ พิมพ์รายการเอง (ไม่กระทบสต็อก)</option></select>
       <button class="x" data-rm="${i}">✕</button></div>
       ${l.custom ? `<input data-f="name" value="${esc(l.name)}" placeholder="เช่น กระบอกเชค สีละ 3 กระบอก" style="margin-top:6px">` : ''}
-      <div class="row"><div><label>จำนวนขอเบิก${it && it.unit ? ' (' + esc(it.unit) + ')' : ''}</label><input data-f="req" type="number" inputmode="numeric" value="${esc(l.qty_req)}"></div>
+      ${it && it.ps > 1 ? `<label>หน่วยที่กรอก</label><select data-f="pu"><option value="base">${esc(it.unit || 'ชิ้น')}</option><option value="pack" ${l.pu === 'pack' ? 'selected' : ''}>${esc(it.pu)} (1 ${esc(it.pu)} = ${it.ps} ${esc(it.unit || '')})</option></select>` : ''}
+      <div class="row"><div><label>จำนวนขอเบิก${it ? ' (' + esc(it.ps > 1 && l.pu === 'pack' ? it.pu : it.unit || '') + ')' : ''}</label><input data-f="req" type="number" inputmode="numeric" value="${esc(l.qty_req)}"></div>
       <div><label>จำนวนที่ได้รับ</label><input data-f="recv" type="number" inputmode="numeric" value="${esc(l.qty_recv)}" placeholder="= ขอเบิก"></div></div>
       <label>หมายเหตุ</label><input data-f="note" value="${esc(l.note)}" placeholder="เช่น ของเก่า 27"></div>`;
   }).join('');
@@ -749,14 +812,23 @@ $('rqSave').onclick = async () => {
   if (!$('rqAct').value.trim()) return POS.toast('กรุณาใส่ชื่อกิจกรรม / งาน', true);
   const bad = lines.find(l => l.item_id && !(+l.qty_req > 0) && !(+l.qty_recv > 0));
   if (bad) return POS.toast('ใส่จำนวนให้ ' + itemName(bad.item_id), true);
-  const sum = lines.filter(l => l.item_id).map(l => `• ${itemName(l.item_id)} +${l.qty_recv !== '' ? l.qty_recv : l.qty_req}`);
+  // กรอกเป็นหน่วยใหญ่ → แปลงเป็นหน่วยเล็ก และจดไว้ในหมายเหตุ
+  const conv = l => {
+    const it = items.find(x => x.id === l.item_id);
+    if (!it || !(it.ps > 1) || l.pu !== 'pack') return l;
+    const m = v => v === '' ? '' : Math.round(+v * it.ps);
+    const shown = l.qty_recv !== '' ? l.qty_recv : l.qty_req;
+    return Object.assign({}, l, { qty_req: m(l.qty_req), qty_recv: m(l.qty_recv), note: [`${shown} ${it.pu}`, l.note.trim()].filter(Boolean).join(' · ') });
+  };
+  const cl = lines.map(conv);
+  const sum = cl.filter(l => l.item_id).map(l => `• ${itemName(l.item_id)} +${l.qty_recv !== '' ? l.qty_recv : l.qty_req}`);
   if (!await confirmBox('บันทึกใบเบิก?', (sum.length ? 'จะเพิ่มสต็อก:\n' + sum.join('\n') : 'ไม่มีรายการที่กระทบสต็อก') + '\n\nแล้วสร้างไฟล์ PDF ให้', 'บันทึก')) return;
   const b = $('rqSave'); busy(b, true);
   try {
     POS.pref('dept', $('rqDept').value.trim()); POS.pref('event', $('rqAct').value.trim());
     const r = await POS.call('createRequisition', {
       doc_date: $('rqDate').value, department: $('rqDept').value.trim(), activity: $('rqAct').value.trim(), requester: $('rqBy').value.trim(), note: $('rqNote').value.trim(),
-      items: lines.map(l => ({ item_id: l.item_id, name: l.item_id ? '' : l.name.trim(), unit: '', qty_req: l.qty_req === '' ? '' : +l.qty_req, qty_recv: l.qty_recv === '' ? '' : +l.qty_recv, note: l.note.trim() }))
+      items: cl.map(l => ({ item_id: l.item_id, name: l.item_id ? '' : l.name.trim(), unit: '', qty_req: l.qty_req === '' ? '' : +l.qty_req, qty_recv: l.qty_recv === '' ? '' : +l.qty_recv, note: l.note.trim() }))
     });
     const offNames = lines.filter(l => l.item_id && (countItems().find(x => x.id === l.item_id) || {}).off).map(l => itemName(l.item_id));
     POS.toast('บันทึกใบเบิก ' + r.requisition.req_id + ' แล้ว' + (offNames.length ? ' · สินค้าที่ยังปิดขายอยู่: ' + offNames.join(', ') + ' (เปิดได้ที่แท็บสินค้า)' : ''), !!offNames.length);
@@ -775,15 +847,20 @@ function renderReqs() {
   $('rqList').querySelectorAll('[data-doc]').forEach(b => b.onclick = () => openDoc(REQS[+b.dataset.doc]));
 }
 async function openDoc(req) {
-  $('docTitle').textContent = `ใบเบิก ${req.req_id} · ${req.activity}`;
-  $('docPages').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังสร้างใบเบิก</div>';
+  return showDoc({ title: `ใบเบิก ${req.req_id} · ${req.activity}`, what: 'ใบเบิก', pages: () => Requisition.renderPages(req), name: Requisition.fileName(req) });
+}
+/** ดูเอกสาร A4 + ดาวน์โหลด/แชร์ PDF: { title, what, pages(): canvases, name, sumHtml } */
+async function showDoc(d) {
+  $('docTitle').textContent = d.title;
+  $('docSum').innerHTML = d.sumHtml || '';
+  $('docPages').innerHTML = `<div class="loading"><span class="spin dark"></span>กำลังสร้าง${esc(d.what)}</div>`;
   $('mDoc').classList.add('on');
   $('mDoc').querySelector('.sheet').scrollTop = 0;
   let pdf = null;
-  const pages = await Requisition.renderPages(req);
-  $('docPages').innerHTML = pages.map(c => `<img src="${c.toDataURL('image/jpeg', 0.8)}" alt="หน้าใบเบิก">`).join('');
-  const getPdf = async () => pdf || (pdf = await Requisition.pdf(req));
-  const name = Requisition.fileName(req);
+  const pages = await d.pages();
+  $('docPages').innerHTML = pages.map(c => `<img src="${c.toDataURL('image/jpeg', 0.8)}" alt="หน้า${esc(d.what)}">`).join('');
+  const getPdf = async () => pdf || (pdf = PdfKit.buildPdf(pages));
+  const name = d.name;
   $('docDl').onclick = async () => {
     const blob = await getPdf();
     const a = document.createElement('a');
