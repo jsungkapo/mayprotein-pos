@@ -4,6 +4,8 @@
 (function () {
   const num = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 });
   const signed = n => (n > 0 ? '+' : '') + num(n);
+  // นับแบบหน่วยใหญ่: "May Protein กล้วย (20 กล่อง + 10 ซอง)"
+  const withPack = l => l.pack_size > 1 && l.packs != null ? `${l.name} (${num(l.packs)} ${l.pack_unit} + ${num(l.loose || 0)} ${l.unit || ''})` : l.name;
 
   async function renderPages(rec, opt) {
     opt = opt || {};
@@ -85,7 +87,7 @@
     table(
       [{ label: 'สินค้า', w: 74 }, { label: 'SKU', w: 24 }, { label: 'ในระบบ', w: 18, align: 'right' }, { label: 'นับได้', w: 18, align: 'right' },
        { label: 'ส่วนต่าง', w: 21, align: 'right', colorOf: r => dcol(r.l) }, { label: 'มูลค่าทุน', w: 25, align: 'right', colorOf: r => dcol(r.l) }],
-      diffs.map(l => ({ l, cells: [l.name, l.sku || '-', num(l.system), num(l.counted), signed(l.diff), l.cost ? signed(l.diff * l.cost) : '-'] }))
+      diffs.map(l => ({ l, cells: [withPack(l), l.sku || '-', num(l.system), num(l.counted), signed(l.diff), l.cost ? signed(l.diff * l.cost) : '-'] }))
     );
 
     heading(`รายการที่นับทั้งหมด · ${rec.items.length} รายการ`);
@@ -94,7 +96,7 @@
     let lastCat = null, no = 0;
     all.forEach(l => {
       if (l.cat !== lastCat) { rows.push({ span: l.cat, bg: '#f7f7f9' }); lastCat = l.cat; }
-      rows.push({ l, cells: [String(++no), l.name, num(l.system), num(l.counted), l.diff ? signed(l.diff) : '✓', l.unit || ''] });
+      rows.push({ l, cells: [String(++no), withPack(l), num(l.system), num(l.counted), l.diff ? signed(l.diff) : '✓', l.unit || ''] });
     });
     table(
       [{ label: 'ลำดับ', w: 14 }, { label: 'สินค้า', w: 96 }, { label: 'ในระบบ', w: 18, align: 'right' }, { label: 'นับได้', w: 18, align: 'right' },
