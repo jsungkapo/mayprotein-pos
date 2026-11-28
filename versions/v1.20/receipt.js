@@ -170,7 +170,7 @@
 
   /** ตัวอย่างบิลสำหรับหน้าตั้งค่า */
   const SAMPLE = {
-    bill_id: 'B0123', datetime: '2026-11-25 14:30', event_name: 'ตัวอย่างงาน', staff: 'พนักงาน', payment_method: 'transfer',
+    bill_id: 'EX202611250012', datetime: '2026-11-25 14:30', event_name: 'ตัวอย่างงาน', staff: 'พนักงาน', payment_method: 'transfer',
     subtotal: 1240, discount_type: 'baht', discount_value: 40, discount_amount: 40, total: 1200, note: '',
     items: [
       { item_name: 'May Protein รสช็อกโกแลต', qty: 2, line_total: 380 },

@@ -1,6 +1,6 @@
 // Network-first: ใช้ไฟล์ล่าสุดจากเว็บเสมอ ถ้าเน็ตหลุดค่อยใช้ไฟล์ที่เก็บไว้ (เปิดแอปตอนไม่มีเน็ตได้)
 const CACHE = 'mayprotein-pos-v5';
-const CORE = ['./', 'index.html', 'admin.html', 'styles.css', 'config.js', 'api.js', 'offline.js', 'requisition.js', 'report.js', 'receipt.js', 'version.js', 'manifest.json', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+const CORE = ['./', 'index.html', 'admin.html', 'styles.css', 'config.js', 'api.js', 'offline.js', 'requisition.js', 'stockcount.js', 'report.js', 'receipt.js', 'version.js', 'manifest.json', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => Promise.all(CORE.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => {})))));

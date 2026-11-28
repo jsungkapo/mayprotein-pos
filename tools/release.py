@@ -82,7 +82,7 @@ def stamp(ver):
     for f in ['index.html', 'admin.html']:
         p = os.path.join(ROOT, f)
         s = open(p, encoding='utf8').read()
-        s = re.sub(r'(src="(?:config|api|requisition|report|receipt|offline|version)\.js|href="styles\.css)(\?v=[^"]*)?"', r'\1?v=' + tag + '"', s)
+        s = re.sub(r'(src="(?:config|api|requisition|report|receipt|offline|version|stockcount)\.js|href="styles\.css)(\?v=[^"]*)?"', r'\1?v=' + tag + '"', s)
         open(p, 'w', encoding='utf8').write(s)
     p = os.path.join(ROOT, 'apps-script', 'Code.gs')
     s = open(p, encoding='utf8').read()

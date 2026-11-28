@@ -6,7 +6,7 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.20'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.21'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
@@ -18,6 +18,7 @@ const BUG_STATUS = ['ใหม่', 'กำลังแก้', 'แก้แล
 const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
+  StockCounts: ['count_id', 'datetime', 'note', 'staff', 'checked', 'matched', 'short_items', 'short_qty', 'over_items', 'over_qty', 'not_counted', 'items_json'],
   BugReports: ['report_id', 'created_at', 'user_id', 'username', 'display_name', 'title', 'detail', 'images', 'app_version', 'device', 'status', 'resolution', 'updated_at', 'updated_by'],
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty', 'lock_fixed'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
@@ -84,7 +85,7 @@ const ADMIN_ACTIONS = {
   deleteProduct: deleteProduct_, deleteVariant: deleteVariant_, deletePackage: deletePackage_,
   uploadImage: uploadImage_, stockCount: stockCount_, getLogs: getLogs_,
   createRequisition: createRequisition_, listRequisitions: listRequisitions_, getSlip: getSlip_,
-  setProductsActive: setProductsActive_
+  setProductsActive: setProductsActive_, listStockCounts: listStockCounts_
 };
 // เฉพาะ master (สิทธิ์สูงสุด): ตั้งค่าระบบ + ปรับสต็อกรายการเดียว
 const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_, listBugs: listBugs_, updateBug: updateBug_, getBugImage: getBugImage_ };
@@ -152,7 +153,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v13')) return;
+  if (cache.get('setup_ok_v14')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -176,13 +177,13 @@ function ensureSetup_() {
   st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
   // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
   withLock_(function () {
-    if (cache.get('setup_ok_v13')) return;
+    if (cache.get('setup_ok_v14')) return;
     const have = {};
     readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
     Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
       if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
     });
-    cache.put('setup_ok_v13', '1', 21600);
+    cache.put('setup_ok_v14', '1', 21600);
   });
 }
 
@@ -1258,12 +1259,16 @@ function stockCount_(p, user) {
     const idx = stockIndex_();
     const adjusted = [];
     let matched = 0;
+    const lines = []; // ทุกรายการที่นับ (เก็บเป็นเอกสารสรุปการนับ)
     counts.forEach(function (c) {
       const id = str_(c.item_id);
       const it = idx[id];
       if (!it || it.has_variants) return;
       const counted = Math.round(num_(c.counted));
       const delta = counted - Math.round(num_(c.system_qty));
+      const prod = it.product || (idx[str_(it.variant.product_id)] || {}).product || {};
+      lines.push({ id: id, name: it.name, sku: str_((it.variant || it.product || {}).sku), unit: str_(prod.unit), cat: str_(prod.category) || 'อื่นๆ',
+        cost: num_(prod.cost), system: Math.round(num_(c.system_qty)), counted: counted, diff: delta });
       if (!delta) { matched++; return; }
       changeStock_(idx, id, delta);
       adjusted.push({ item_id: id, name: it.name, system_qty: num_(c.system_qty), counted: counted, delta: delta, stock_qty: it.stock });
@@ -1279,10 +1284,32 @@ function stockCount_(p, user) {
         };
       }));
     }
-    log_(user, 'นับสต็อก', 'สต็อก', '', str_(p.note), 'นับ ' + counts.length + ' รายการ · ตรง ' + matched + ' · ปรับ ' + adjusted.length +
+    // บันทึกใบสรุปการนับ
+    const short = lines.filter(function (l) { return l.diff < 0; }), over = lines.filter(function (l) { return l.diff > 0; });
+    const sum = function (a) { return a.reduce(function (t, l) { return t + l.diff; }, 0); };
+    const rec = {
+      count_id: nextId_(readTable_('StockCounts'), 'count_id', 'SC', 4), datetime: now_(), note: str_(p.note), staff: user.display_name,
+      checked: lines.length, matched: matched, short_items: short.length, short_qty: sum(short), over_items: over.length, over_qty: sum(over),
+      not_counted: Math.max(0, Math.round(num_(p.total_items)) - lines.length), items_json: JSON.stringify(lines)
+    };
+    appendRow_('StockCounts', rec);
+    log_(user, 'นับสต็อก', 'สต็อก', rec.count_id, str_(p.note), 'นับ ' + counts.length + ' รายการ · ตรง ' + matched + ' · ปรับ ' + adjusted.length +
       (adjusted.length ? ' — ' + adjusted.map(function (a) { return a.name + ' ' + a.system_qty + '→' + a.counted; }).join(', ') : ''));
-    return { checked: counts.length, matched: matched, adjusted: adjusted };
+    return { checked: counts.length, matched: matched, adjusted: adjusted, count: cleanCount_(rec) };
   });
+}
+
+function cleanCount_(r) {
+  let items = [];
+  try { items = JSON.parse(str_(r.items_json) || '[]'); } catch (e) {}
+  return {
+    count_id: str_(r.count_id), datetime: str_(r.datetime), note: str_(r.note), staff: str_(r.staff), checked: num_(r.checked), matched: num_(r.matched),
+    short_items: num_(r.short_items), short_qty: num_(r.short_qty), over_items: num_(r.over_items), over_qty: num_(r.over_qty), not_counted: num_(r.not_counted), items: items
+  };
+}
+/** ประวัติการนับสต็อก (ล่าสุดก่อน 30 ครั้ง) */
+function listStockCounts_() {
+  return { counts: readTable_('StockCounts').slice(-30).reverse().map(cleanCount_) };
 }
 
 /* ---------------- Bug reports ---------------- */
@@ -1371,7 +1398,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v13');
+  CacheService.getScriptCache().remove('setup_ok_v14');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

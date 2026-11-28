@@ -283,6 +283,73 @@
       if (el && c) { el.src = c; el.style.display = ''; }
     },
 
+    /** ฟอร์มแจ้งปัญหา (ทุกสิทธิ์) หัวข้อ + รายละเอียด + รูปได้ 3 รูป · ชื่อผู้ส่ง = บัญชีที่ล็อกอิน · ทวนก่อนส่ง */
+    bugReport() {
+      const me = POS.user() || {};
+      let m = document.getElementById('mBug');
+      if (!m) {
+        m = document.createElement('div'); m.className = 'modal'; m.id = 'mBug';
+        m.innerHTML = '<div class="sheet" id="bugSheet"></div>';
+        document.body.appendChild(m);
+        const st = document.createElement('style');
+        st.textContent = '#bugSheet .bimgs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}#bugSheet .bimg{position:relative;width:88px;height:88px;border-radius:10px;overflow:hidden;background:#f2f2f4;flex:none}#bugSheet .bimg img{width:100%;height:100%;object-fit:cover}#bugSheet .bimg button{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:0;background:#000a;color:#fff;font-size:13px}#bugSheet .badd{width:88px;height:88px;border-radius:10px;border:2px dashed #ccc;background:#fff;font-size:13px;color:#888}#bugSheet .bwho{background:#f5f5f7;border-radius:10px;padding:10px;font-size:14px}#bugSheet .brev{background:#f8f8fa;border-radius:12px;padding:12px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word}#bugSheet .brev b{display:block;font-size:16px;margin-bottom:4px}#bugSheet textarea{min-height:110px}';
+        document.head.appendChild(st);
+      }
+      const el = m.querySelector('#bugSheet');
+      const f = { title: '', detail: '', imgs: [] }; // imgs: base64 jpeg
+      const close = () => m.classList.remove('on');
+      const who = `${POS.esc(me.display_name || '')} <small style="color:#888">@${POS.esc(me.username || '')}</small>`;
+      const ver = (window.APP_VERSION || {}).version || '';
+      const keep = () => { const t = el.querySelector('#bgT'), d = el.querySelector('#bgD'); if (t) f.title = t.value; if (d) f.detail = d.value; };
+      const form = () => {
+        el.innerHTML = `<h3>🐞 แจ้งปัญหา</h3>
+          <label>ผู้แจ้ง</label><div class="bwho">${who}</div>
+          <label>หัวข้อ *</label><input id="bgT" maxlength="200" placeholder="เช่น กดยืนยันการขายแล้วค้าง" value="${POS.esc(f.title)}">
+          <label>รายละเอียด *</label><textarea id="bgD" maxlength="5000" placeholder="ทำอะไรอยู่ กดตรงไหน แล้วเกิดอะไรขึ้น">${POS.esc(f.detail)}</textarea>
+          <label>รูปประกอบ (ไม่เกิน 3 รูป)</label>
+          <div class="bimgs">${f.imgs.map((b, i) => `<div class="bimg"><img src="data:image/jpeg;base64,${b}"><button data-rm="${i}">✕</button></div>`).join('')}${f.imgs.length < 3 ? '<button class="badd" id="bgAdd">＋ เพิ่มรูป</button>' : ''}</div>
+          <input type="file" id="bgFile" accept="image/*" multiple style="display:none">
+          <br><button class="btn" id="bgNext">ถัดไป: ตรวจสอบก่อนส่ง</button><br><br><button class="btn g" id="bgX">ยกเลิก</button>`;
+        el.querySelector('#bgX').onclick = close;
+        el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { keep(); f.imgs.splice(+b.dataset.rm, 1); form(); });
+        const add = el.querySelector('#bgAdd'), inp = el.querySelector('#bgFile');
+        if (add) add.onclick = () => inp.click();
+        inp.onchange = async () => {
+          keep();
+          const files = [...inp.files].slice(0, 3 - f.imgs.length);
+          if (inp.files.length > files.length) POS.toast('แนบได้สูงสุด 3 รูป', true);
+          for (const file of files) { try { f.imgs.push(await POS.jpegImage(file, 1280, 0.75)); } catch (e) { POS.toast(e.message, true); } }
+          form();
+        };
+        el.querySelector('#bgNext').onclick = () => {
+          keep();
+          if (!f.title.trim()) return POS.toast('กรุณาใส่หัวข้อ', true);
+          if (!f.detail.trim()) return POS.toast('กรุณาใส่รายละเอียด', true);
+          review();
+        };
+      };
+      const review = () => {
+        el.innerHTML = `<h3>ตรวจสอบก่อนส่ง</h3>
+          <div class="brev"><b>${POS.esc(f.title.trim())}</b>${POS.esc(f.detail.trim())}</div>
+          ${f.imgs.length ? `<div class="bimgs">${f.imgs.map(b => `<div class="bimg"><img src="data:image/jpeg;base64,${b}"></div>`).join('')}</div>` : '<div class="hint" style="font-size:13px;color:#888;margin-top:8px">ไม่มีรูปแนบ</div>'}
+          <div style="font-size:13px;color:#666;margin-top:10px">ผู้แจ้ง: ${who}${ver ? ' · เวอร์ชัน v' + POS.esc(ver) : ''}</div>
+          <br><button class="btn" id="bgSend">📤 ยืนยันส่งรายงาน</button><br><br><button class="btn g" id="bgBack">กลับไปแก้</button>`;
+        el.querySelector('#bgBack').onclick = form;
+        const send = el.querySelector('#bgSend');
+        send.onclick = async () => {
+          send.disabled = true; send.innerHTML = '<span class="spin"></span> กำลังส่ง';
+          try {
+            const r = await POS.call('submitBug', { title: f.title.trim(), detail: f.detail.trim(), images: f.imgs, app_version: ver, device: navigator.userAgent }, { timeout: 60000 });
+            el.innerHTML = `<h3>ส่งรายงานแล้ว ✓</h3><div class="brev">เลขที่ <b style="display:inline">${POS.esc(r.report_id)}</b>\nขอบคุณที่แจ้งปัญหา</div><br><button class="btn" id="bgDone">ปิด</button>`;
+            el.querySelector('#bgDone').onclick = close;
+          } catch (e) { POS.toast(e.network ? 'ส่งไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง' : e.message, true); send.disabled = false; send.textContent = '📤 ยืนยันส่งรายงาน'; }
+        };
+      };
+      form();
+      m.classList.add('on');
+      el.scrollTop = 0;
+    },
+
     uuid() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
       return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2);

@@ -6,16 +6,19 @@
  * แล้ว Deploy เป็น Web app (Execute as: Me, Who has access: Anyone)
  */
 
-const SERVER_VERSION = '1.17'; // ตั้งโดย tools/release.py
+const SERVER_VERSION = '1.20'; // ตั้งโดย tools/release.py
 const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 5;
 const LOCK_MINUTES = 5;
 const IMAGE_FOLDER = 'MayProtein POS Images';
 const SLIP_FOLDER = 'MayProtein POS Slips'; // รูปสลิปเก็บแบบส่วนตัว (ไม่แชร์ลิงก์)
+const BUG_FOLDER = 'MayProtein POS Bug Reports'; // รูปแนบรายงานปัญหา (ส่วนตัว)
+const BUG_STATUS = ['ใหม่', 'กำลังแก้', 'แก้แล้ว', 'ไม่แก้'];
 
 const SCHEMA = {
   Products: ['product_id', 'sku', 'name', 'category', 'subcategory', 'unit', 'price', 'cost', 'has_variants', 'stock_qty', 'description', 'image_url', 'active'],
   Variants: ['variant_id', 'product_id', 'sku', 'size', 'color', 'price', 'cost', 'stock_qty', 'image_url', 'active'],
+  BugReports: ['report_id', 'created_at', 'user_id', 'username', 'display_name', 'title', 'detail', 'images', 'app_version', 'device', 'status', 'resolution', 'updated_at', 'updated_by'],
   Packages: ['package_id', 'name', 'price', 'description', 'image_url', 'active', 'total_qty', 'lock_fixed'],
   PackageSlots: ['package_id', 'slot', 'qty', 'allowed_items', 'lines', 'kind'],
   StockIn: ['stockin_id', 'datetime', 'event_name', 'item_id', 'qty', 'note', 'staff'],
@@ -74,7 +77,7 @@ function json_(o) {
 }
 
 const PUBLIC_ACTIONS = { register: register_, login: login_ };
-const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_, todaySales: todaySales_, cancelBill: cancelBill_ };
+const USER_ACTIONS = { me: me_, logout: logout_, getCatalog: getCatalog_, createSale: createSale_, getImage: getImage_, todaySales: todaySales_, cancelBill: cancelBill_, submitBug: submitBug_ };
 const ADMIN_ACTIONS = {
   getAdminData: getAdminData_, updateUser: updateUser_,
   saveProduct: saveProduct_, saveVariant: saveVariant_, savePackage: savePackage_,
@@ -84,7 +87,7 @@ const ADMIN_ACTIONS = {
   setProductsActive: setProductsActive_
 };
 // เฉพาะ master (สิทธิ์สูงสุด): ตั้งค่าระบบ + ปรับสต็อกรายการเดียว
-const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_ };
+const MASTER_ACTIONS = { saveSettings: saveSettings_, addStock: addStock_, listBugs: listBugs_, updateBug: updateBug_, getBugImage: getBugImage_ };
 
 /** สิทธิ์: master > admin > seller */
 function isAdmin_(u) { return !!u && (u.role === 'admin' || u.role === 'master'); }
@@ -115,6 +118,7 @@ function route_(req) {
   const p = req.payload || {};
   if (PUBLIC_ACTIONS[action]) return PUBLIC_ACTIONS[action](p);
   ensureMaster_();
+  migrateBillIds_();
   const user = auth_(req.token);
   if (USER_ACTIONS[action]) return USER_ACTIONS[action](p, user, req.token);
   if (ADMIN_ACTIONS[action]) {
@@ -148,7 +152,7 @@ function norm_(v) {
 
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok_v12')) return;
+  if (cache.get('setup_ok_v13')) return;
   const book = ss_();
   Object.keys(SCHEMA).forEach(function (name) {
     let s = book.getSheetByName(name);
@@ -172,13 +176,13 @@ function ensureSetup_() {
   st.getRange(1, 2, st.getMaxRows(), 1).setNumberFormat('@');
   // ล็อกไว้ กันหลายเครื่องเพิ่มค่าเริ่มต้นซ้ำพร้อมกัน
   withLock_(function () {
-    if (cache.get('setup_ok_v12')) return;
+    if (cache.get('setup_ok_v13')) return;
     const have = {};
     readTable_('Settings').forEach(function (r) { if (r.key) have[r.key] = true; });
     Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
       if (!have[k]) appendRow_('Settings', { key: k, value: DEFAULT_SETTINGS[k] });
     });
-    cache.put('setup_ok_v12', '1', 21600);
+    cache.put('setup_ok_v13', '1', 21600);
   });
 }
 
@@ -673,7 +677,10 @@ function createSale_(p, user) {
     dAmount = Math.min(subtotal, Math.round(dAmount * 100) / 100);
     const total = Math.round((subtotal - dAmount) * 100) / 100;
 
-    const billId = nextId_(sales, 'bill_id', 'B', 4);
+
+    // เลขบิล EX + ปีเดือนวันที่ขาย + ลำดับ 4 หลัก (เริ่ม 0001 ใหม่ทุกวัน)
+    const soldAt = saleTime_(p);
+    const billId = newBillId_(sales, soldAt);
 
     // รูปสลิป (ถ้ามี) — บันทึกก่อนตัดสต็อก ถ้าบันทึกรูปไม่ได้จะไม่ขาย
     let slipUrl = '';
@@ -688,7 +695,7 @@ function createSale_(p, user) {
     const autoHidden = flushStock_(idx, user);
 
     const bill = {
-      bill_id: billId, datetime: saleTime_(p), event_name: str_(p.event_name), subtotal: subtotal,
+      bill_id: billId, datetime: soldAt, event_name: str_(p.event_name), subtotal: subtotal,
       discount_type: dType, discount_value: dValue, discount_amount: dAmount, total: total,
       payment_method: method, note: str_(p.note), staff: user.display_name, client_id: clientId, slip_url: slipUrl
     };
@@ -703,6 +710,73 @@ function createSale_(p, user) {
 }
 
 /** เวลาขาย: บิลออฟไลน์ใช้เวลาที่ขายจริงในเครื่อง (ถ้าสมเหตุสมผล) ไม่งั้นใช้เวลาตอนบันทึก */
+/** เลขบิลแบบ EXYYYYMMDDXXXX — EX = ขายออกบูธ, วันที่ = วันที่ขาย, XXXX = ลำดับบิลของวันนั้น */
+const BILL_PREFIX = 'EX';
+function newBillId_(sales, datetime) {
+  const day = BILL_PREFIX + str_(datetime).slice(0, 10).replace(/-/g, '');
+  let max = 0;
+  sales.forEach(function (r) {
+    const id = str_(r.bill_id);
+    if (id.length === day.length + 4 && id.indexOf(day) === 0) max = Math.max(max, Number(id.slice(day.length)) || 0);
+  });
+  return day + pad_(max + 1, 4);
+}
+
+/**
+ * เปลี่ยนเลขบิลเก่า (B0001…) เป็นแบบใหม่ ครั้งเดียว: สำรองไฟล์ชีตก่อน แล้วเรียงตามเวลาขายในแต่ละวัน
+ * แก้ใน Sales, SaleItems, หมายเหตุ StockIn (คืนสต็อกจากยกเลิกบิล) และ Logs
+ */
+function migrateBillIds_() {
+  const props = PropertiesService.getScriptProperties();
+  const cache = CacheService.getScriptCache();
+  if (cache.get('billids_ok_v1') || props.getProperty('billids_ex_v1')) { cache.put('billids_ok_v1', '1', 21600); return; }
+  withLock_(function () {
+    if (props.getProperty('billids_ex_v1')) return;
+    const sales = readTable_('Sales');
+    const isNew = function (id) { return new RegExp('^' + BILL_PREFIX + '\\d{12}$').test(id); };
+    const old = sales.filter(function (r) { return str_(r.bill_id) && !isNew(str_(r.bill_id)); });
+    if (old.length) {
+      // สำรองไฟล์ทั้งชีตก่อนแก้
+      const file = DriveApp.getFileById(ss_().getId());
+      const backup = file.makeCopy(file.getName() + ' — สำรองก่อนเปลี่ยนเลขบิล ' + now_());
+      const num = function (id) { const m = String(id).match(/(\d+)$/); return m ? Number(m[1]) : 0; };
+      old.sort(function (a, b) { return str_(a.datetime) < str_(b.datetime) ? -1 : str_(a.datetime) > str_(b.datetime) ? 1 : num(a.bill_id) - num(b.bill_id); });
+      const map = {};
+      const taken = sales.filter(function (r) { return isNew(str_(r.bill_id)); });
+      old.forEach(function (r) {
+        const id = newBillId_(taken, str_(r.datetime));
+        map[str_(r.bill_id)] = id;
+        taken.push({ bill_id: id });
+      });
+      const col = function (name, field, fn) {
+        const sh = sh_(name), hs = headers_(name), c = hs.indexOf(field) + 1, n = sh.getLastRow() - 1;
+        if (c < 1 || n < 1) return;
+        const rg = sh.getRange(2, c, n, 1), vals = rg.getValues();
+        let changed = false;
+        vals.forEach(function (v) { const nv = fn(v[0]); if (nv !== v[0]) { v[0] = nv; changed = true; } });
+        if (changed) rg.setValues(vals);
+      };
+      const swap = function (v) { const k = str_(v); return map[k] !== undefined ? map[k] : v; };
+      col('Sales', 'bill_id', swap);
+      col('SaleItems', 'bill_id', swap);
+      col('StockIn', 'note', function (v) { return String(v).replace(/(ยกเลิกบิล )(\S+)/, function (m, a, id) { return map[id] ? a + map[id] : m; }); });
+      const lh = headers_('Logs'), tt = lh.indexOf('target_type'), ti = lh.indexOf('target_id');
+      const ls = sh_('Logs'), ln = ls.getLastRow() - 1;
+      if (tt >= 0 && ti >= 0 && ln > 0) {
+        const rg = ls.getRange(2, 1, ln, lh.length), vals = rg.getValues();
+        let changed = false;
+        vals.forEach(function (r) { if (r[tt] === 'บิล' && map[str_(r[ti])]) { r[ti] = map[str_(r[ti])]; changed = true; } });
+        if (changed) rg.setValues(vals);
+      }
+      log_({ display_name: 'ระบบ', username: 'system' }, 'แก้ไข', 'บิล', '', 'เปลี่ยนเลขบิล',
+        'เปลี่ยนเลขบิลเป็นแบบ ' + BILL_PREFIX + 'YYYYMMDDXXXX ' + old.length + ' บิล · สำรองไฟล์ไว้ที่ "' + backup.getName() + '" · ' +
+        Object.keys(map).slice(0, 300).map(function (k) { return k + '→' + map[k]; }).join(', ') + (old.length > 300 ? ' …' : ''));
+    }
+    props.setProperty('billids_ex_v1', now_());
+  });
+  cache.put('billids_ok_v1', '1', 21600);
+}
+
 function saleTime_(p) {
   const t = str_(p.sold_at);
   if (!p.offline || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)) return now_();
@@ -1211,6 +1285,72 @@ function stockCount_(p, user) {
   });
 }
 
+/* ---------------- Bug reports ---------------- */
+
+/** ทุกคนส่งได้: { title, detail, images: [base64 jpeg ≤3], app_version, device } — ชื่อผู้ส่งใช้จากบัญชีที่ล็อกอิน */
+function submitBug_(p, user) {
+  const title = str_(p.title), detail = str_(p.detail);
+  if (!title) throw new Error('กรุณาใส่หัวข้อ');
+  if (!detail) throw new Error('กรุณาใส่รายละเอียด');
+  if (title.length > 200 || detail.length > 5000) throw new Error('ข้อความยาวเกินไป');
+  const imgs = (Array.isArray(p.images) ? p.images : []).slice(0, 3);
+  // บันทึกรูปก่อน (นอก lock) ถ้ารูปใหญ่เกินจะไม่บันทึกรายงาน
+  const ids = imgs.map(function (b64, i) {
+    const bytes = Utilities.base64Decode(str_(b64));
+    if (bytes.length > 4 * 1024 * 1024) throw new Error('รูปที่ ' + (i + 1) + ' ใหญ่เกิน 4MB');
+    return folder_(BUG_FOLDER).createFile(Utilities.newBlob(bytes, 'image/jpeg', 'bug-' + Date.now() + '-' + (i + 1) + '.jpg')).getId();
+  });
+  return withLock_(function () {
+    const rows = readTable_('BugReports');
+    const r = {
+      report_id: nextId_(rows, 'report_id', 'BR', 3), created_at: now_(), user_id: user.user_id, username: user.username,
+      display_name: user.display_name, title: title, detail: detail, images: ids.join(','),
+      app_version: str_(p.app_version).slice(0, 20), device: str_(p.device).slice(0, 200), status: 'ใหม่', resolution: '', updated_at: '', updated_by: ''
+    };
+    appendRow_('BugReports', r);
+    log_(user, 'แจ้งปัญหา', 'รายงานปัญหา', r.report_id, title, (ids.length ? 'แนบรูป ' + ids.length + ' รูป' : ''));
+    return { report_id: r.report_id };
+  });
+}
+
+function cleanBug_(r) {
+  return {
+    report_id: str_(r.report_id), created_at: str_(r.created_at), username: str_(r.username), display_name: str_(r.display_name),
+    title: str_(r.title), detail: str_(r.detail), images: str_(r.images).split(',').filter(String), app_version: str_(r.app_version),
+    device: str_(r.device), status: str_(r.status) || 'ใหม่', resolution: str_(r.resolution), updated_at: str_(r.updated_at), updated_by: str_(r.updated_by)
+  };
+}
+
+function listBugs_() {
+  return { reports: readTable_('BugReports').map(cleanBug_).reverse() };
+}
+
+/** มาสเตอร์ปรับสถานะ + บันทึกว่าแก้อะไร: { report_id, status, resolution } */
+function updateBug_(p, user) {
+  return withLock_(function () {
+    const r = readTable_('BugReports').filter(function (x) { return str_(x.report_id) === str_(p.report_id); })[0];
+    if (!r) throw new Error('ไม่พบรายงาน');
+    const patch = { updated_at: now_(), updated_by: user.display_name };
+    if (p.status !== undefined) {
+      if (BUG_STATUS.indexOf(str_(p.status)) < 0) throw new Error('สถานะไม่ถูกต้อง');
+      patch.status = str_(p.status);
+    }
+    if (p.resolution !== undefined) patch.resolution = str_(p.resolution).slice(0, 2000);
+    updateRow_('BugReports', r._row, patch);
+    log_(user, 'แก้ไข', 'รายงานปัญหา', r.report_id, r.title, [patch.status && patch.status !== r.status ? 'สถานะ: ' + patch.status : '', patch.resolution ? 'บันทึก: ' + patch.resolution : ''].filter(String).join(' · '));
+    return { report: cleanBug_(Object.assign({}, r, patch)) };
+  });
+}
+
+/** รูปแนบรายงาน (เฉพาะไฟล์ที่อยู่ในรายงานจริง) */
+function getBugImage_(p) {
+  const id = str_(p.id);
+  const ok = readTable_('BugReports').some(function (r) { return str_(r.images).split(',').indexOf(id) >= 0; });
+  if (!id || !ok) throw new Error('ไม่พบรูป');
+  const blob = DriveApp.getFileById(id).getBlob();
+  return { mime: blob.getContentType() || 'image/jpeg', data: Utilities.base64Encode(blob.getBytes()) };
+}
+
 function folder_(name) {
   const it = DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : DriveApp.createFolder(name);
@@ -1231,7 +1371,7 @@ function uploadImage_(p) {
 
 /** รันครั้งเดียวจาก editor เพื่อให้ Apps Script ขอสิทธิ์ Sheets + Drive และสร้างแท็บที่ขาด */
 function setup() {
-  CacheService.getScriptCache().remove('setup_ok_v12');
+  CacheService.getScriptCache().remove('setup_ok_v13');
   ensureSetup_();
   imageFolder_();
   folder_(SLIP_FOLDER);

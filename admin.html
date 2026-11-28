@@ -10,7 +10,7 @@
 <title>MayProtein POS · หลังบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.20">
+<link rel="stylesheet" href="styles.css?v=1.21">
 <style>
 /* หลังบ้าน: ธีมสีฟ้าอ่อน (หน้าขายใช้สีชมพู) */
 :root{--pink:#2a8bd0;--pink-soft:#e3f1fc;--bg:#f2f8fd}
@@ -173,6 +173,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
     <div class="hint" style="margin:8px 4px">ติ๊ก ✓ ถ้านับได้ตรงกับในระบบ หรือพิมพ์จำนวนที่นับได้ถ้าไม่ตรง · ระบบจำที่นับไว้ในเครื่องนี้ ปิดแอปแล้วกลับมานับต่อได้</div>
     <button class="btn" id="cSave">บันทึกผลการนับ</button><br><br>
     <button class="btn g" id="cClear">ล้างที่นับไว้ทั้งหมด</button><br><br>
+    <div class="box"><h4 style="margin:0 0 8px;display:flex;justify-content:space-between">ประวัติการนับสต็อก <a onclick="loadCounts()" style="font-weight:400">↻</a></h4><div id="scList"><div class="empty">-</div></div></div>
   </div>
   <div class="page" id="p-log">
     <div class="row" style="gap:6px;margin-bottom:10px"><input id="lQ" placeholder="🔍 ค้นหา ชื่อสินค้า / คน / บิล"><select id="lF" style="flex:none;width:130px"><option value="">ทั้งหมด</option><option>บิล</option><option value="@สลิป">บิลที่มีสลิป</option><option value="สต็อก">สต็อก</option><option>สินค้า</option><option>ไซซ์/สี</option><option>แพ็กเกจ</option><option>พนักงาน</option><option>ตั้งค่า</option><option value="@ลบ">เฉพาะที่ลบ</option></select></div>
@@ -185,6 +186,7 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mDoc"><div class="sheet" style="max-width:820px">
   <h3 id="docTitle">ใบเบิก</h3>
   <div class="row" style="margin-bottom:10px"><button class="btn sm" id="docDl">⬇️ ดาวน์โหลด PDF</button><button class="btn sm line" id="docShare">📤 แชร์</button></div>
+  <div id="docSum"></div>
   <div id="docPages"><div class="loading"><span class="spin dark"></span>กำลังสร้างใบเบิก</div></div>
   <br><button class="btn g" onclick="closeM('mDoc')">ปิด</button>
 </div></div>
@@ -197,11 +199,12 @@ details.box summary{list-style:none}details.box summary::before{content:'▸ ';c
 <div class="modal" id="mConfirm"><div class="sheet"><h3 id="cfTitle"></h3><div class="msg" id="cfMsg"></div><div class="row"><button class="btn g" id="cfNo">ยกเลิก</button><button class="btn" id="cfYes">ยืนยัน</button></div></div></div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
-<script src="version.js?v=1.20"></script>
-<script src="config.js?v=1.20"></script>
-<script src="api.js?v=1.20"></script>
-<script src="requisition.js?v=1.20"></script>
-<script src="receipt.js?v=1.20"></script>
+<script src="version.js?v=1.21"></script>
+<script src="config.js?v=1.21"></script>
+<script src="api.js?v=1.21"></script>
+<script src="requisition.js?v=1.21"></script>
+<script src="stockcount.js?v=1.21"></script>
+<script src="receipt.js?v=1.21"></script>
 <script>
 const esc = POS.esc, money = POS.money, $ = id => document.getElementById(id);
 let D = { products: [], variants: [], packages: [], settings: {}, users: [] }, me = null;
@@ -232,7 +235,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
   if (b.dataset.t === 'users') load();
   if (b.dataset.t === 'stock') { renderStockTab(); initReq(); loadReqs(); load().then(() => { renderStockTab(); if (rq.lines.every(l => !l.item_id && !l.custom)) renderReqLines(); }); }
-  if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); }
+  if (b.dataset.t === 'count') { renderCount(); load().then(renderCount); loadCounts(); }
   if (b.dataset.t === 'log') loadLogs();
   if (b.dataset.t === 'set') loadBugs();
 });
@@ -652,12 +655,36 @@ $('cSave').onclick = async () => {
   if (!ok) return;
   const b = $('cSave'); busy(b, true);
   try {
-    const r = await POS.call('stockCount', { counts, note: draft.note || '' });
+    const r = await POS.call('stockCount', { counts, note: draft.note || '', total_items: all.length });
     draft = { items: {} }; saveDraft();
     POS.toast(`บันทึกแล้ว · ตรง ${r.matched} · ปรับ ${r.adjusted.length} รายการ`);
-    busy(b, false); await load(); renderCount();
+    busy(b, false);
+    if (r.count) { COUNTS = [r.count].concat(COUNTS || []); renderCounts(); openCountDoc(r.count); }
+    await load(); renderCount();
   } catch (e) { POS.toast(e.message, true); busy(b, false); }
 };
+
+/* ---------- ใบสรุปการนับสต็อก ---------- */
+let COUNTS = null;
+async function loadCounts() {
+  try { COUNTS = (await POS.call('listStockCounts')).counts; renderCounts(); }
+  catch (e) { $('scList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderCounts() {
+  if (!COUNTS) return;
+  $('scList').innerHTML = COUNTS.map((c, i) => `<div class="rqi"><div class="t"><b>${esc(c.count_id)}${c.note ? ' · ' + esc(c.note) : ''}</b>
+    <small>${esc(Requisition.thaiDate(c.datetime.slice(0, 10)))} ${esc(c.datetime.slice(11, 16))} · ${esc(c.staff)} · นับ ${c.checked} · ตรง ${c.matched}${c.short_items ? ` · <span style="color:var(--bad)">ขาด ${c.short_items}</span>` : ''}${c.over_items ? ` · <span style="color:var(--warn)">เกิน ${c.over_items}</span>` : ''}</small></div>
+    <button class="btn sm line" data-sc="${i}">📄 ดู / PDF</button></div>`).join('') || '<div class="empty">ยังไม่เคยบันทึกการนับ</div>';
+  $('scList').querySelectorAll('[data-sc]').forEach(b => b.onclick = () => openCountDoc(COUNTS[+b.dataset.sc]));
+}
+function openCountDoc(c) {
+  const diffs = c.items.filter(l => l.diff).sort((a, b) => a.diff - b.diff);
+  const sumHtml = `<div class="box" style="background:#f7f9fb">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><span class="tag">นับ ${c.checked} รายการ</span><span class="tag ok">ตรง ${c.matched}</span>${c.short_items ? `<span class="tag bad">ขาด ${c.short_items} รายการ (${c.short_qty})</span>` : ''}${c.over_items ? `<span class="tag warn">เกิน ${c.over_items} รายการ (+${c.over_qty})</span>` : ''}${c.not_counted ? `<span class="tag">ยังไม่นับ ${c.not_counted}</span>` : ''}</div>
+    ${diffs.length ? diffs.slice(0, 8).map(l => `<div style="font-size:14px">• ${esc(l.name)}: ${l.system} → ${l.counted} <b style="color:${l.diff < 0 ? 'var(--bad)' : 'var(--warn)'}">(${l.diff > 0 ? '+' : ''}${l.diff})</b></div>`).join('') + (diffs.length > 8 ? `<div class="hint">… และอีก ${diffs.length - 8} รายการ (ดูในเอกสาร)</div>` : '') : '<div style="font-size:14px;color:var(--ok)">✓ ทุกรายการตรงกับระบบ</div>'}</div>`;
+  showDoc({ title: `สรุปการนับสต็อก ${c.count_id}`, what: 'ใบสรุปการนับ', sumHtml, name: StockCountDoc.fileName(c),
+    pages: () => StockCountDoc.renderPages(c, { shop: D.settings.shop_name, printedAt: new Date().toLocaleString('th-TH') }) });
+}
 
 /* ---------- stock in ---------- */
 function renderStockTab() {
@@ -775,15 +802,20 @@ function renderReqs() {
   $('rqList').querySelectorAll('[data-doc]').forEach(b => b.onclick = () => openDoc(REQS[+b.dataset.doc]));
 }
 async function openDoc(req) {
-  $('docTitle').textContent = `ใบเบิก ${req.req_id} · ${req.activity}`;
-  $('docPages').innerHTML = '<div class="loading"><span class="spin dark"></span>กำลังสร้างใบเบิก</div>';
+  return showDoc({ title: `ใบเบิก ${req.req_id} · ${req.activity}`, what: 'ใบเบิก', pages: () => Requisition.renderPages(req), name: Requisition.fileName(req) });
+}
+/** ดูเอกสาร A4 + ดาวน์โหลด/แชร์ PDF: { title, what, pages(): canvases, name, sumHtml } */
+async function showDoc(d) {
+  $('docTitle').textContent = d.title;
+  $('docSum').innerHTML = d.sumHtml || '';
+  $('docPages').innerHTML = `<div class="loading"><span class="spin dark"></span>กำลังสร้าง${esc(d.what)}</div>`;
   $('mDoc').classList.add('on');
   $('mDoc').querySelector('.sheet').scrollTop = 0;
   let pdf = null;
-  const pages = await Requisition.renderPages(req);
-  $('docPages').innerHTML = pages.map(c => `<img src="${c.toDataURL('image/jpeg', 0.8)}" alt="หน้าใบเบิก">`).join('');
-  const getPdf = async () => pdf || (pdf = await Requisition.pdf(req));
-  const name = Requisition.fileName(req);
+  const pages = await d.pages();
+  $('docPages').innerHTML = pages.map(c => `<img src="${c.toDataURL('image/jpeg', 0.8)}" alt="หน้า${esc(d.what)}">`).join('');
+  const getPdf = async () => pdf || (pdf = PdfKit.buildPdf(pages));
+  const name = d.name;
   $('docDl').onclick = async () => {
     const blob = await getPdf();
     const a = document.createElement('a');
